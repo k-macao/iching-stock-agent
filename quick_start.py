@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-每日A股港股周易分析 - 麥肯錫風格完整版
-五大部分：大V觀點 / 市場掃描 / 本週走勢 / 每日運勢 / 全球現金流
+每日A股港股全景分析 - 麥肯錫風格 v2.0
+結構：每日運勢 / 本週走勢 / 大V觀點 / 市場掃描 / 港股通滬股通 / 全球現金流
 """
 import os, sys, asyncio, logging, requests
 from datetime import datetime, timedelta
@@ -145,13 +145,7 @@ def get_wuxing_info(date=None):
 
 def get_weekly_hexagrams(start_date=None):
     if start_date is None: start_date = datetime.now()
-    days = []
-    for i in range(7):
-        d = start_date + timedelta(days=i)
-        hx = get_daily_hexagram(d)
-        wx = get_wuxing_info(d)
-        days.append({"date": d, "hexagram": hx, "wuxing": wx})
-    return days
+    return [{"date": start_date + timedelta(days=i), "hexagram": get_daily_hexagram(start_date + timedelta(days=i)), "wuxing": get_wuxing_info(start_date + timedelta(days=i))} for i in range(7)]
 
 # ============================================================
 # 數據獲取
@@ -196,18 +190,9 @@ def fetch_reddit_hot():
         headers = {"User-Agent": "IchingAgent/1.0"}
         r = requests.get("https://www.reddit.com/r/wallstreetbets/hot.json?limit=5", headers=headers, timeout=15)
         if r.status_code == 200:
-            data = r.json()
-            posts = []
-            for post in data.get("data", {}).get("children", [])[:5]:
-                p = post.get("data", {})
-                posts.append({"title": p.get("title", "")[:80], "score": p.get("score", 0), "comments": p.get("num_comments", 0)})
-            return posts
+            return [{"title": p["data"].get("title","")[:80], "score": p["data"].get("score",0), "comments": p["data"].get("num_comments",0)} for p in r.json().get("data",{}).get("children",[])[:5]]
     except: pass
-    return [
-        {"title": "Market looking shaky - time to hedge or buy the dip?", "score": 342, "comments": 89},
-        {"title": "Fed pivot expectations rising - what sectors benefit?", "score": 256, "comments": 67},
-        {"title": "China stimulus package - A-shares and HK tech plays", "score": 198, "comments": 45},
-    ]
+    return [{"title": "Market looking shaky - time to hedge or buy the dip?", "score": 342, "comments": 89},{"title": "Fed pivot expectations rising - what sectors benefit?", "score": 256, "comments": 67},{"title": "China stimulus package - A-shares and HK tech plays", "score": 198, "comments": 45}]
 
 # ============================================================
 # 模擬數據源 (可替換為真實API)
@@ -221,310 +206,236 @@ def get_youtuber_views():
 
 def get_professional_analysis():
     return [
-        {"source": "彭博社", "summary": "全球資金流向顯示新興市場獲持續淨流入，A股港股配置價值凸顯"},
-        {"source": "路透", "summary": "中國經濟數據邊際改善，但房地產拖累仍存，政策發力是關鍵變量"},
-        {"source": "財新", "summary": "國內流動性保持合理充裕，DR007低位運行，市場資金面寬鬆"},
+        {"source": "📰 彭博社", "summary": "全球資金流向顯示新興市場獲持續淨流入，A股港股配置價值凸顯"},
+        {"source": "📰 路透", "summary": "中國經濟數據邊際改善，但房地產拖累仍存，政策發力是關鍵變量"},
+        {"source": "📰 財新", "summary": "國內流動性保持合理充裕，DR007低位運行，市場資金面寬鬆"},
     ]
 
 def get_moomoo_analysis():
-    return {
-        "市場廣度": "漲跌比 1:2.3，市場情緒偏弱",
-        "板塊輪動": "資金從科技股流向防禦性板塊（公用事業、醫療）",
-        "資金流向": "南向資金連續3日淨流入，北向資金小幅流出",
-        "關鍵位": "恆指支撐位 24,800，阻力位 25,800",
-    }
+    return [
+        {"icon": "📊", "title": "市場廣度", "value": "漲跌比 1:2.3", "desc": "市場情緒偏弱，個股分化加劇"},
+        {"icon": "🔄", "title": "板塊輪動", "value": "科技→防禦", "desc": "資金從科技股流向公用事業、醫療"},
+        {"icon": "💰", "title": "資金流向", "value": "南進北出", "desc": "南向資金連續3日淨流入，北向小幅流出"},
+        {"icon": "📍", "title": "關鍵位", "value": "24,800 / 25,800", "desc": "恆指支撐位 24,800，阻力位 25,800"},
+    ]
 
 def get_gordon_comments():
     return [
-        {"topic": "A股", "sentiment": "悲觀", "summary": "散戶普遍認為3000點難守，等待政策底"},
-        {"topic": "港股", "sentiment": "中性", "summary": "討論集中在騰訊回購力度及阿里分拆進展"},
-        {"topic": "宏觀", "sentiment": "謹慎", "summary": "關注美聯儲議息會議及國內經濟數據發布"},
+        {"topic": "📱 A股", "sentiment": "悲觀", "summary": "散戶普遍認為3000點難守，等待政策底"},
+        {"topic": "📱 港股", "sentiment": "中性", "summary": "討論集中在騰訊回購力度及阿里分拆進展"},
+        {"topic": "📱 宏觀", "sentiment": "謹慎", "summary": "關注美聯儲議息會議及國內經濟數據發布"},
     ]
 
 def get_market_factors():
-    return {
-        "美聯儲利率": {"value": "5.25%-5.50%", "impact": "高利率壓制估值，但降息預期支撐市場"},
-        "人民幣匯率": {"value": "7.25", "impact": "貶值壓力制約外資流入，但出口受益"},
-        "SHIBOR隔夜": {"value": "1.72%", "impact": "流動性寬鬆，利好股市"},
-        "恐慌指數": {"value": "16.5", "impact": "處於低位，市場情緒平穩"},
-        "大宗商品": {"value": "分化", "impact": "油價上漲利好能源股，銅價下跌拖累週期股"},
-    }
+    return [
+        {"icon": "🏦", "name": "美聯儲利率", "value": "5.25%-5.50%", "impact": "高利率壓制估值，降息預期支撐市場"},
+        {"icon": "💱", "name": "人民幣匯率", "value": "7.25", "impact": "貶值壓力制約外資流入，出口受益"},
+        {"icon": "📈", "name": "SHIBOR隔夜", "value": "1.72%", "impact": "流動性寬鬆，利好股市"},
+        {"icon": "😨", "name": "恐慌指數", "value": "16.5", "impact": "處於低位，市場情緒平穩"},
+        {"icon": "🛢️", "name": "大宗商品", "value": "分化", "impact": "油價上漲利好能源股，銅價拖累週期股"},
+    ]
 
 def get_global_cashflow():
-    return {
-        "美聯儲資產負債表": {"value": "7.3萬億美元", "trend": "持續縮表", "impact": "流動性收緊，但速度放緩"},
-        "央行公開市場操作": {"value": "淨投放", "trend": "寬鬆", "impact": "國內流動性充裕"},
-        "全球ETF資金流向": {"value": "新興市場淨流入", "trend": "連續8周", "impact": "外資增配A股港股"},
-        "聰明錢動向": {"value": "增配科技+醫療", "trend": "防禦+成長", "impact": "機構偏好確定性增長"},
-        "暗池交易": {"value": "佔比上升", "trend": "機構調倉", "impact": "大資金在悄悄布局低估值板塊"},
-    }
+    return [
+        {"icon": "🏛️", "name": "美聯儲資產負債表", "value": "7.3萬億美元", "trend": "持續縮表", "impact": "流動性收緊，但速度放緩"},
+        {"icon": "🇨🇳", "name": "央行公開市場操作", "value": "淨投放", "trend": "寬鬆", "impact": "國內流動性充裕"},
+        {"icon": "🌍", "name": "全球ETF資金流向", "value": "新興市場淨流入", "trend": "連續8周", "impact": "外資增配A股港股"},
+        {"icon": "🧠", "name": "聰明錢動向", "value": "增配科技+醫療", "trend": "防禦+成長", "impact": "機構偏好確定性增長"},
+        {"icon": "🕳️", "name": "暗池交易", "value": "佔比上升", "trend": "機構調倉", "impact": "大資金悄悄布局低估值板塊"},
+    ]
+
+def get_stock_connect():
+    """港股通/滬股通資金流動"""
+    return [
+        {"name": "港股通(滬)", "icon": "🔵", "net": "+32.5億", "trend": "連續5日淨流入", "direction": "in", "detail": "南下資金持續配置港股金融與科技"},
+        {"name": "港股通(深)", "icon": "🔵", "net": "+28.3億", "trend": "淨流入", "direction": "in", "detail": "互聯網龍頭獲持續加倉"},
+        {"name": "滬股通", "icon": "🔴", "net": "-15.2億", "trend": "淨流出", "direction": "out", "detail": "外資短期獲利了結，觀望情緒濃"},
+        {"name": "深股通", "icon": "🔴", "net": "-8.7億", "trend": "淨流出", "direction": "out", "detail": "創業板資金流出明顯"},
+        {"name": "合計淨額", "icon": "🟢", "net": "+36.9億", "trend": "整體淨流入", "direction": "in", "detail": "南向資金佔優，港股受青睞"},
+    ]
 
 # ============================================================
-# HTML報告生成 (麥肯錫風格 - 完整版)
+# HTML報告生成
 # ============================================================
-def generate_html(hexagram, wuxing, a_idx, h_idx, weekly_hx,
-                  yt_views, prof_analysis, moomoo, gordon, reddit,
-                  market_factors, global_cf):
-
-    up = BAGUA.get(hexagram.get("upper_trigram",""), {})
-    lo = BAGUA.get(hexagram.get("lower_trigram",""), {})
-    us = f"{up.get('symbol','')} {up.get('nature','')}"
-    ls = f"{lo.get('symbol','')} {lo.get('nature','')}"
-
-    sig = hexagram.get("signal","")
-    trd = hexagram.get("trend","")
+def generate_html(hx, wx, a_idx, h_idx, weekly_hx, yt, prof, moomoo, gordon, reddit, mf, gcf, sc):
+    up = BAGUA.get(hx.get("upper_trigram",""), {})
+    lo = BAGUA.get(hx.get("lower_trigram",""), {})
     ab = sum(1 for i in a_idx if i.get("change_pct",0) > 0)
     ae = sum(1 for i in a_idx if i.get("change_pct",0) < 0)
     hb = sum(1 for i in h_idx if i.get("change_pct",0) > 0)
     he_ = sum(1 for i in h_idx if i.get("change_pct",0) < 0)
 
     rt = ["neutral"]
-    if "大吉" in sig or "強看漲" in sig or "大升" in sig or "看漲" in sig: rt.append("bullish")
-    elif "大凶" in sig: rt.append("bearish")
+    if "大吉" in hx.get("signal","") or "強看漲" in hx.get("signal","") or "大升" in hx.get("signal","") or "看漲" in hx.get("signal",""): rt.append("bullish")
+    elif "大凶" in hx.get("signal",""): rt.append("bearish")
     if ab > ae: rt.append("bullish")
     elif ae > ab: rt.append("bearish")
     bc = rt.count("bullish"); ec = rt.count("bearish")
     ov = "偏多" if bc >= 2 else ("偏空" if ec >= 2 else "震盪")
 
-    # 色值定義 (深灰體系)
-    C = {
-        "bg": "#e2e4e8",          # 頁面背景
-        "card": "#f8f9fa",        # 卡片背景
-        "card_b": "#e5e7eb",      # 卡片邊框
-        "text": "#1a1a1a",        # 主文字
-        "label": "#374151",       # 標籤文字（深灰）
-        "sub": "#4b5563",         # 次要文字（中深灰）
-        "border": "#6b7280",      # 邊框
-        "divider": "#9ca3af",     # 分割線（淺灰）
-        "green": "#1a7f37",
-        "red": "#cf222e",
-        "header_bg": "#1a237e",
-        "yellow_bg": "#fff8e1",
-        "blue_bg": "#e3f2fd",
-        "footer_bg": "#f0f2f5",
-    }
+    C = {"bg": "#e2e4e8", "card": "#f8f9fa", "card_b": "#e5e7eb", "text": "#1a1a1a", "label": "#374151", "sub": "#4b5563", "border": "#6b7280", "div": "#9ca3af", "grn": "#1a7f37", "red": "#cf222e", "yel": "#fff8e1", "blu": "#e3f2fd", "ftr": "#f0f2f5"}
+
+    def sec(t, n):
+        rn = {1:"I", 2:"II", 3:"III", 4:"IV", 5:"V", 6:"VI", 7:"VII", 8:"VIII"}
+        p = f"{rn[n]}. " if n in rn else ""
+        return f'<div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:{C["label"]};margin-bottom:16px;border-bottom:1px solid {C["div"]};padding-bottom:8px;">{p}{t}</div>'
 
     def row(idx):
         p = idx.get("change_pct",0)
-        c = C["green"] if p > 0 else (C["red"] if p < 0 else C["sub"])
-        return f'<tr style="border-bottom:1px solid {C["divider"]};"><td style="padding:10px 4px;font-size:13px;">{idx.get("name","")}</td><td style="text-align:right;padding:10px 4px;font-size:13px;font-variant-numeric:tabular-nums;">{idx.get("price",0)}</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-weight:600;font-variant-numeric:tabular-nums;">{p:+.2f}%</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-variant-numeric:tabular-nums;">{idx.get("change_amt",0):+.2f}</td></tr>'
+        c = C["grn"] if p > 0 else (C["red"] if p < 0 else C["sub"])
+        return f'<tr style="border-bottom:1px solid {C["div"]};"><td style="padding:10px 4px;font-size:13px;">{idx.get("name","")}</td><td style="text-align:right;padding:10px 4px;font-size:13px;font-variant-numeric:tabular-nums;">{idx.get("price",0)}</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-weight:600;font-variant-numeric:tabular-nums;">{p:+.2f}%</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-variant-numeric:tabular-nums;">{idx.get("change_amt",0):+.2f}</td></tr>'
 
-    def sec(title, num):
-        rn = {1:"I", 2:"II", 3:"III", 4:"IV", 5:"V", 6:"VI"}
-        prefix = f"{rn[num]}. " if num in rn else ""
-        return f'<div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:{C["label"]};margin-bottom:16px;border-bottom:1px solid {C["divider"]};padding-bottom:8px;">{prefix}{title}</div>'
+    def card(icon, label, value, sub=""):
+        return f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:14px 16px;margin-bottom:8px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">{icon} {label}</div><div style="font-size:13px;color:{C["text"]};font-weight:600;">{value}</div>{f"<div style=\"font-size:12px;color:{C["sub"]};margin-top:2px;\">{sub}</div>" if sub else ""}</div>'
 
-    def card(label, value, sub=""):
-        return f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:14px 16px;margin-bottom:8px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">{label}</div><div style="font-size:13px;color:{C["text"]};font-weight:600;">{value}</div>{f"<div style=\"font-size:12px;color:{C["sub"]};margin-top:2px;\">{sub}</div>" if sub else ""}</div>'
-
-    # Part I: 大V觀點
-    yt_html = ""
-    for v in yt_views:
-        sc = C["green"] if v["signal"] in ["看漲","低吸"] else (C["red"] if v["signal"] in ["謹慎","看跌"] else C["sub"])
-        yt_html += f'''<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:14px 16px;margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <span style="font-size:13px;font-weight:600;color:{C["text"]};">{v["name"]}</span>
-                <span style="font-size:11px;color:{sc};font-weight:600;border:1px solid {sc};padding:2px 8px;border-radius:10px;">{v["signal"]}</span>
-            </div>
-            <div style="font-size:13px;color:{C["text"]};line-height:1.6;">{v["view"]}</div>
-        </div>'''
-
-    prof_html = ""
-    for p in prof_analysis:
-        prof_html += f'''<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid {C["card_b"]};">
-            <span style="font-size:11px;color:{C["label"]};min-width:60px;font-weight:600;">{p["source"]}</span>
-            <span style="font-size:13px;color:{C["text"]};line-height:1.5;">{p["summary"]}</span>
-        </div>'''
-
-    # Part II: 市場掃描
-    moomoo_html = ""
-    for k, v in moomoo.items():
-        moomoo_html += f'<div style="padding:6px 0;border-bottom:1px solid {C["card_b"]};"><span style="font-size:11px;color:{C["label"]};">{k}:</span> <span style="font-size:13px;color:{C["text"]};">{v}</span></div>'
-
-    gordon_html = ""
-    for g in gordon:
-        sc = C["red"] if g["sentiment"] == "悲觀" else (C["green"] if g["sentiment"] == "樂觀" else C["sub"])
-        gordon_html += f'<div style="padding:6px 0;border-bottom:1px solid {C["card_b"]};"><span style="font-size:11px;color:{C["label"]};">{g["topic"]}</span> <span style="font-size:11px;color:{sc};">({g["sentiment"]})</span><br><span style="font-size:13px;color:{C["text"]};">{g["summary"]}</span></div>'
-
-    reddit_html = ""
-    for r in reddit:
-        reddit_html += f'<div style="padding:8px 0;border-bottom:1px solid {C["card_b"]};"><div style="font-size:13px;color:{C["text"]};font-weight:500;">{r["title"]}</div><div style="font-size:11px;color:{C["sub"]};margin-top:4px;">👍 {r["score"]} | 💬 {r["comments"]}</div></div>'
-
-    # Part III: 市場因子
-    factor_html = ""
-    for k, v in market_factors.items():
-        factor_html += f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:2px;">{k}: <span style="font-weight:600;color:{C["text"]};">{v["value"]}</span></div><div style="font-size:12px;color:{C["text"]};line-height:1.5;">{v["impact"]}</div></div>'
-
-    # Part IV: 每日運勢
-    fortune_html = ""
+    # I. 每日運勢
     wdn = ["週一","週二","週三","週四","週五","週六","週日"]
-    for i, day in enumerate(weekly_hx):
-        hx = day["hexagram"]; wx = day["wuxing"]; dt = day["date"]
+    fortune = ""
+    for i, d in enumerate(weekly_hx):
+        h, w, dt = d["hexagram"], d["wuxing"], d["date"]
         wn = wdn[dt.weekday()]
-        fc = C["green"] if "看漲" in hx.get("signal","") or "大吉" in hx.get("signal","") else (C["red"] if "看跌" in hx.get("signal","") or "大凶" in hx.get("signal","") else C["sub"])
-        fortune_html += f'''<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <span style="font-size:13px;font-weight:600;color:{C["text"]};">{wn} ({dt.strftime("%m/%d")})</span>
-                <span style="font-size:12px;color:{fc};font-weight:600;">{hx.get("signal","")}</span>
-            </div>
-            <div style="font-size:12px;color:{C["sub"]};">{hx.get("hexagram_name","")} | 五行{wx.get("day_element","")} | {hx.get("trend","")}</div>
-            <div style="font-size:12px;color:{C["text"]};margin-top:4px;line-height:1.5;">{hx.get("stock_meaning","")}</div>
-        </div>'''
+        fc = C["grn"] if "看漲" in h.get("signal","") or "大吉" in h.get("signal","") else (C["red"] if "看跌" in h.get("signal","") or "大凶" in h.get("signal","") else C["sub"])
+        fortune += f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span style="font-size:13px;font-weight:600;color:{C["text"]};">📅 {wn} ({dt.strftime("%m/%d")})</span><span style="font-size:12px;color:{fc};font-weight:600;">{h.get("signal","")}</span></div><div style="font-size:12px;color:{C["sub"]};">☯️ {h.get("hexagram_name","")} | 五行{w.get("day_element","")} | {h.get("trend","")}</div><div style="font-size:12px;color:{C["text"]};margin-top:4px;line-height:1.5;">💡 {h.get("stock_meaning","")}</div></div>'
 
-    # Part V: 全球現金流
-    cf_html = ""
-    for k, v in global_cf.items():
-        tc = C["green"] if "淨流入" in v.get("trend","") or "寬鬆" in v.get("trend","") or "增配" in v.get("trend","") else (C["red"] if "收緊" in v.get("trend","") or "淨流出" in v.get("trend","") else C["sub"])
-        cf_html += f'''<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <span style="font-size:13px;font-weight:600;color:{C["text"]};">{k}</span>
-                <span style="font-size:11px;color:{tc};font-weight:600;">{v["trend"]}</span>
-            </div>
-            <div style="font-size:12px;color:{C["sub"]};margin-bottom:2px;">當前值: {v["value"]}</div>
-            <div style="font-size:12px;color:{C["text"]};line-height:1.5;">{v["impact"]}</div>
-        </div>'''
+    # II. A股
+    a_tbl = "".join(row(i) for i in a_idx) if a_idx else f'<tr><td colspan="4" style="text-align:center;color:{C["sub"]};padding:24px 0;">休市中</td></tr>'
+    a_ratio = f'{ab}漲{ae}跌' if a_idx else '休市'
+    a_dir = '偏多' if ab > ae else ('偏空' if ae > ab else '震盪') if a_idx else '休市'
 
-    # 五行板塊
-    bs = wuxing.get("sectors",{}).get("bullish",[])
-    es = wuxing.get("sectors",{}).get("bearish",[])
-    st = ""
-    if bs:
-        st += f'<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:6px;">利好板塊</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'
-        for s in bs: st += f'<span style="display:inline-block;padding:4px 12px;border:1px solid {C["text"]};font-size:12px;">{s}</span>'
-        st += '</div></div>'
-    if es:
-        st += f'<div style="margin-top:12px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:6px;">注意板塊</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'
-        for s in es: st += f'<span style="display:inline-block;padding:4px 12px;border:1px solid {C["sub"]};font-size:12px;color:{C["sub"]};">{s}</span>'
-        st += '</div></div>'
+    # III. 港股
+    h_tbl = "".join(row(i) for i in h_idx) if h_idx else f'<tr><td colspan="4" style="text-align:center;color:{C["sub"]};padding:24px 0;">休市中</td></tr>'
+    h_ratio = f'{hb}漲{he_}跌' if h_idx else '休市'
+    h_dir = '偏多' if hb > he_ else ('偏空' if he_ > hb else '震盪') if h_idx else '休市'
 
-    at = f'{ab}漲{ae}跌' if a_idx else '休市'
-    ad = '偏多' if ab > ae else ('偏空' if ae > ab else '震盪') if a_idx else '休市'
-    ht = f'{hb}漲{he_}跌' if h_idx else '休市'
-    hdd = '偏多' if hb > he_ else ('偏空' if he_ > hb else '震盪') if h_idx else '休市'
-    wu_el = wuxing.get("day_element","")
+    # IV. 本週走勢
+    factors = "".join(f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:2px;">{f["icon"]} {f["name"]}: <span style="font-weight:600;color:{C["text"]};">{f["value"]}</span></div><div style="font-size:12px;color:{C["text"]};line-height:1.5;">{f["impact"]}</div></div>' for f in mf)
+
+    wu_el = wx.get("day_element","")
     wu_bi = ELEMENT_MARKET.get(wu_el,{}).get("bullish","")
-    today_str = hexagram['date']
+    bs = wx.get("sectors",{}).get("bullish",[])
+    es = wx.get("sectors",{}).get("bearish",[])
     bs_str = ', '.join(bs) if bs else '防禦性板塊'
     es_str = ', '.join(es) if es else '市場波動'
 
-    # 羅馬數字
-    roman = ["","I","II","III","IV","V","VI"]
+    # V. 大V觀點
+    yt_html = ""
+    for v in yt:
+        sc_c = C["grn"] if v["signal"] in ["看漲","低吸"] else (C["red"] if v["signal"] in ["謹慎","看跌"] else C["sub"])
+        yt_html += f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:14px 16px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:13px;font-weight:600;color:{C["text"]};">🎙️ {v["name"]}</span><span style="font-size:11px;color:{sc_c};font-weight:600;border:1px solid {sc_c};padding:2px 8px;border-radius:10px;">{v["signal"]}</span></div><div style="font-size:13px;color:{C["text"]};line-height:1.6;">{v["view"]}</div></div>'
+
+    prof_html = "".join(f'<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid {C["card_b"]};"><span style="font-size:11px;color:{C["label"]};min-width:60px;font-weight:600;">{p["source"]}</span><span style="font-size:13px;color:{C["text"]};line-height:1.5;">{p["summary"]}</span></div>' for p in prof)
+
+    # VI. 市場掃描
+    m_html = "".join(f'<div style="padding:8px 0;border-bottom:1px solid {C["card_b"]};"><div style="font-size:11px;color:{C["label"]};">{m["icon"]} {m["title"]}: <span style="font-weight:600;color:{C["text"]};">{m["value"]}</span></div><div style="font-size:12px;color:{C["sub"]};margin-top:2px;">{m["desc"]}</div></div>' for m in moomoo)
+
+    g_html = "".join(f'<div style="padding:8px 0;border-bottom:1px solid {C["card_b"]};"><div style="font-size:11px;color:{C["label"]};">{g["topic"]} <span style="color:{C["red"] if g["sentiment"]=="悲觀" else (C["grn"] if g["sentiment"]=="樂觀" else C["sub"])};">({g["sentiment"]})</span></div><div style="font-size:12px;color:{C["text"]};margin-top:2px;">{g["summary"]}</div></div>' for g in gordon)
+
+    r_html = "".join(f'<div style="padding:8px 0;border-bottom:1px solid {C["card_b"]};"><div style="font-size:13px;color:{C["text"]};font-weight:500;">💬 {r["title"]}</div><div style="font-size:11px;color:{C["sub"]};margin-top:4px;">👍 {r["score"]} | 💬 {r["comments"]}</div></div>' for r in reddit)
+
+    # VII. 港股通/滬股通
+    sc_tbl = f"""<table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="border-bottom:2px solid {C["text"]};">
+        <th style="text-align:left;padding:10px 8px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">通道</th>
+        <th style="text-align:right;padding:10px 8px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">淨額</th>
+        <th style="text-align:left;padding:10px 8px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">趨勢</th>
+        <th style="text-align:left;padding:10px 8px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">說明</th>
+        </tr></thead><tbody>"""
+    for s in sc:
+        nc = C["grn"] if s["direction"] == "in" else C["red"]
+        sc_tbl += f'<tr style="border-bottom:1px solid {C["div"]};"><td style="padding:10px 8px;font-size:13px;">{s["icon"]} {s["name"]}</td><td style="text-align:right;padding:10px 8px;font-size:13px;color:{nc};font-weight:600;font-variant-numeric:tabular-nums;">{s["net"]}</td><td style="padding:10px 8px;font-size:12px;color:{C["sub"]};">{s["trend"]}</td><td style="padding:10px 8px;font-size:12px;color:{C["text"]};">{s["detail"]}</td></tr>'
+    sc_tbl += '</tbody></table>'
+
+    sc_total = sc[-1] if sc else {}
+    sc_summary = f'<div style="margin-top:12px;padding:12px 16px;background:{C["card"]};border:1px solid {C["card_b"]};font-size:12px;color:{C["text"]};line-height:1.6;">📊 資金淨額: <b style="color:{C["grn"] if "+" in sc_total.get("net","") else C["red"]}">{sc_total.get("net","N/A")}</b> | 趨勢: {sc_total.get("trend","N/A")} | {sc_total.get("detail","")}</div>'
+
+    # VIII. 全球現金流
+    cf_html = "".join(f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span style="font-size:13px;font-weight:600;color:{C["text"]};">{v["icon"]} {k}</span><span style="font-size:11px;color:{C["grn"] if "淨流入" in v.get("trend","") or "寬鬆" in v.get("trend","") or "增配" in v.get("trend","") else (C["red"] if "收緊" in v.get("trend","") or "淨流出" in v.get("trend","") else C["sub"])};font-weight:600;">{v["trend"]}</span></div><div style="font-size:12px;color:{C["sub"]};margin-bottom:2px;">當前值: {v["value"]}</div><div style="font-size:12px;color:{C["text"]};line-height:1.5;">{v["impact"]}</div></div>' for k, v in gcf.items())
+
+    # 卦象卡片
+    us = f"{up.get('symbol','')} {up.get('nature','')}"
+    ls = f"{lo.get('symbol','')} {lo.get('nature','')}"
+    sig = hx.get("signal","")
+    trd = hx.get("trend","")
+
+    bs_tags = "".join(f'<span style="display:inline-block;padding:4px 12px;border:1px solid {C["text"]};font-size:12px;margin:3px;">{s}</span>' for s in bs)
+    es_tags = "".join(f'<span style="display:inline-block;padding:4px 12px;border:1px solid {C["sub"]};font-size:12px;color:{C["sub"]};margin:3px;">{s}</span>' for s in es)
+    tags_html = ""
+    if bs: tags_html += f'<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:6px;">✅ 利好板塊</div><div>{bs_tags}</div></div>'
+    if es: tags_html += f'<div style="margin-top:12px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:6px;">⚠️ 注意板塊</div><div>{es_tags}</div></div>'
+
+    today_str = hx['date']
 
     return f"""<!DOCTYPE html>
 <html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Market Report | {today_str}</title></head>
 <body style="margin:0;padding:0;background:{C["bg"]};font-family:-apple-system,'Helvetica Neue','Segoe UI',Roboto,'PingFang TC','Microsoft JhengHei',sans-serif;color:{C["text"]};-webkit-font-smoothing:antialiased;">
 <div style="max-width:720px;margin:32px auto;background:{C["card"]};border:1px solid {C["card_b"]};">
 
-<!-- HEADER -->
 <div style="padding:32px 36px 24px;border-bottom:3px solid {C["text"]};">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
-<div><div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:{C["label"]};margin-bottom:8px;">ICHING STOCK ANALYSIS</div>
+<div><div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:{C["label"]};margin-bottom:8px;">📊 ICHING STOCK ANALYSIS</div>
 <h1 style="margin:0;font-size:22px;font-weight:600;color:{C["text"]};letter-spacing:0.5px;">每日A股港股全景分析</h1>
-<div style="font-size:13px;color:{C["sub"]};margin-top:6px;">{today_str}</div></div>
+<div style="font-size:13px;color:{C["sub"]};margin-top:6px;">📅 {today_str}</div></div>
 <div><div style="display:inline-block;padding:6px 20px;border:2px solid {C["text"]};font-size:15px;font-weight:700;letter-spacing:2px;">{ov}</div></div>
 </div></div>
 
-<!-- 卦象 + 行情 -->
-<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
-{sec("卦象與市場",1)}
-<div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap;">
-<div style="flex:1;"><div style="font-size:28px;font-weight:700;color:{C["text"]};margin-bottom:4px;letter-spacing:2px;">{hexagram.get('hexagram_name','')}</div>
-<div style="font-size:13px;color:{C["sub"]};">上{us} ｜ 下{ls}</div></div>
-<div style="text-align:right;"><div style="font-size:13px;color:{C["text"]};font-weight:600;">{sig}</div>
-<div style="font-size:12px;color:{C["sub"]};margin-top:2px;">趨勢: {trd}</div></div></div>
+<!-- I. 每日運勢 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["div"]};">{sec("每日運勢 ☯️",1)}{fortune}</div>
 
-<div style="background:{C["yellow_bg"]};border-left:3px solid {C["text"]};padding:14px 18px;margin:16px 0;">
-<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">卦辭</div>
-<div style="font-size:13px;color:{C["text"]};line-height:1.8;font-style:italic;">{hexagram.get('judgment','')}</div></div>
-
-<div style="background:{C["blue_bg"]};border-left:3px solid {C["sub"]};padding:14px 18px;margin:16px 0;">
-<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">市場解讀</div>
-<div style="font-size:13px;color:{C["text"]};line-height:1.8;">{hexagram.get('stock_meaning','')}</div></div>
-
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:{C["divider"]};border:1px solid {C["divider"]};margin-top:20px;">
-<div style="background:{C["card"]};padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">日干</div><div style="font-size:16px;font-weight:600;color:{C["text"]};">{wuxing.get('day_stem','-')}</div></div>
-<div style="background:{C["card"]};padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">日支</div><div style="font-size:16px;font-weight:600;color:{C["text"]};">{wuxing.get('day_branch','-')}</div></div>
-<div style="background:{C["card"]};padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">五行</div><div style="font-size:16px;font-weight:600;color:{C["text"]};">{wuxing.get('day_element','-')}</div></div>
-<div style="background:{C["card"]};padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">卦五行</div><div style="font-size:16px;font-weight:600;color:{C["text"]};">{hexagram.get('element','-')}</div></div></div>
-{st}</div>
-
-<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
-{sec("A股市場","")}
-<table style="width:100%;border-collapse:collapse;">
-<thead><tr style="border-bottom:2px solid {C["text"]};">
+<!-- II. A股 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["div"]};">{sec("A股市場 📈",2)}
+<table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:2px solid {C["text"]};">
 <th style="text-align:left;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">指數</th>
 <th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">收盤價</th>
 <th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">漲跌幅</th>
 <th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">漲跌額</th>
-</tr></thead><tbody>
-{"".join(row(i) for i in a_idx) if a_idx else '<tr><td colspan="4" style="text-align:center;color:{C["sub"]};padding:24px 0;">休市中</td></tr>'}
-</tbody></table>
-{f'<div style="margin-top:12px;font-size:12px;color:{C["sub"]};">漲跌比: {at}</div>' if a_idx else ''}</div>
+</tr></thead><tbody>{a_tbl}</tbody></table>
+<div style="margin-top:12px;font-size:12px;color:{C["sub"]};">📊 漲跌比: {a_ratio} | 方向: {a_dir}</div></div>
 
-<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
-{sec("港股市場","")}
-<table style="width:100%;border-collapse:collapse;">
-<thead><tr style="border-bottom:2px solid {C["text"]};">
+<!-- III. 港股 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["div"]};">{sec("港股市場 🇭🇰",3)}
+<table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:2px solid {C["text"]};">
 <th style="text-align:left;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">指數</th>
 <th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">收盤價</th>
 <th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">漲跌幅</th>
 <th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">漲跌額</th>
-</tr></thead><tbody>
-{"".join(row(i) for i in h_idx) if h_idx else '<tr><td colspan="4" style="text-align:center;color:{C["sub"]};padding:24px 0;">休市中</td></tr>'}
-</tbody></table>
-{f'<div style="margin-top:12px;font-size:12px;color:{C["sub"]};">漲跌比: {ht}</div>' if h_idx else ''}</div>
+</tr></thead><tbody>{h_tbl}</tbody></table>
+<div style="margin-top:12px;font-size:12px;color:{C["sub"]};">📊 漲跌比: {h_ratio} | 方向: {h_dir}</div></div>
 
-<!-- PART 1: 大V觀點 -->
-<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
-{sec("大V觀點與專業分析",2)}
-<div style="font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">YouTuber / 財經大V</div>
-{yt_html}
-<div style="margin-top:20px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">財經專業頻道</div>
-{prof_html}</div>
-
-<!-- PART 2: 市場掃描 -->
-<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
-{sec("市場輿情掃描",3)}
-<div style="font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">moomoo 市場分析</div>
-{moomoo_html}
-<div style="margin-top:16px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">高登網 主要評論</div>
-{gordon_html}
-<div style="margin-top:16px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">Reddit 熱門討論</div>
-{reddit_html}</div>
-
-<!-- PART 3: 本週走勢 -->
-<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
-{sec("本週走勢研判",4)}
-<div style="font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">核心市場因子</div>
-{factor_html}
+<!-- IV. 本週走勢 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["div"]};">{sec("本週走勢研判 📉",4)}{factors}
 <div style="margin-top:16px;padding:14px 18px;background:{C["card"]};border:1px solid {C["card_b"]};">
-<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">本週綜合判斷</div>
-<div style="font-size:13px;color:{C["text"]};font-weight:600;line-height:1.7;">綜合卦象「{hexagram.get('hexagram_name','')}」（{sig}）及市場因子，本週整體基調為「{ov}」。「{wu_el}」日五行主導，{wu_bi}。建議關注{bs_str}方向，注意{es_str}風險。</div></div></div>
+<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">📋 本週綜合判斷</div>
+<div style="font-size:13px;color:{C["text"]};font-weight:600;line-height:1.7;">綜合卦象「{hx.get('hexagram_name','')}」（{sig}）及市場因子，本週整體基調為「{ov}」。「{wu_el}」日五行主導，{wu_bi}。建議關注{bs_str}方向，注意{es_str}風險。</div></div></div>
 
-<!-- PART 4: 每日運勢 -->
-<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
-{sec("七日運勢",5)}
-{fortune_html}</div>
+<!-- V. 大V觀點 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["div"]};">{sec("大V觀點與專業分析 🎯",5)}
+<div style="font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">📺 YouTuber / 財經大V</div>{yt_html}
+<div style="margin-top:20px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">📰 財經專業頻道</div>{prof_html}</div>
 
-<!-- PART 5: 全球現金流 -->
-<div style="padding:28px 36px;">
-{sec("全球現金流與大資本動向",6)}
-{cf_html}
+<!-- VI. 市場掃描 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["div"]};">{sec("市場輿情掃描 📡",6)}
+<div style="font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">🐮 moomoo 市場分析</div>{m_html}
+<div style="margin-top:16px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">🗣️ 高登網 主要評論</div>{g_html}
+<div style="margin-top:16px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">🔥 Reddit 熱門討論</div>{r_html}</div>
+
+<!-- VII. 港股通/滬股通 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["div"]};">{sec("港股通/滬股通資金流動 💰",7)}{sc_tbl}{sc_summary}</div>
+
+<!-- VIII. 全球現金流 -->
+<div style="padding:28px 36px;">{sec("全球現金流與大資本動向 🌍",8)}{cf_html}
 <div style="margin-top:16px;padding:14px 18px;background:{C["card"]};border:1px solid {C["card_b"]};">
-<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">大資本意圖推演</div>
+<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">🧠 大資本意圖推演</div>
 <div style="font-size:13px;color:{C["text"]};font-weight:600;line-height:1.7;">當前全球流動性呈現「外緊內鬆」格局。美聯儲縮表放緩但利率仍高，央行持續寬鬆注入流動性。大資金正在從高位科技股向低估值防禦板塊轉移，同時逢低布局A股港股核心資產。暗池交易活躍度上升暗示機構在悄悄建倉。短期市場可能繼續震盪洗盤，但中長期配置窗口正在打開。</div></div></div>
 
-<!-- FOOTER -->
-<div style="padding:20px 36px;border-top:1px solid {C["divider"]};background:{C["footer_bg"]};">
-<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:{C["sub"]};">
-<span>Iching Stock Analysis Report</span><span>{today_str}</span></div>
-<div style="font-size:10px;color:{C["label"]};margin-top:8px;text-align:center;">本報告由AI自動生成，僅供參考，不構成投資建議。市場有風險，投資需謹慎。</div></div>
+<div style="padding:20px 36px;border-top:1px solid {C["div"]};background:{C["ftr"]};">
+<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:{C["sub"]};"><span>📊 Iching Stock Analysis Report</span><span>{today_str}</span></div>
+<div style="font-size:10px;color:{C["label"]};margin-top:8px;text-align:center;">⚠️ 本報告由AI自動生成，僅供參考，不構成投資建議。市場有風險，投資需謹慎。</div></div>
 
 </div></body></html>"""
 
 
 # ============================================================
-# PushPlus 推送
+# PushPlus & 主流程
 # ============================================================
 def push(title, content):
     if not PUSHPLUS_TOKEN:
@@ -543,35 +454,28 @@ def push(title, content):
         return False
 
 
-# ============================================================
-# 主流程
-# ============================================================
 async def run():
     logger.info("=" * 50)
     logger.info("🔮 每日A股港股全景分析")
     logger.info("=" * 50)
     t0 = datetime.now()
 
-    logger.info("☯️ 計算卦象 & 獲取行情...")
     hx = get_daily_hexagram(t0)
     wx = get_wuxing_info(t0)
-    weekly_hx = get_weekly_hexagrams(t0)
+    whx = get_weekly_hexagrams(t0)
     ai = fetch_a_share()
     hi = fetch_hk()
-
-    logger.info("📡 獲取觀點 & 掃描市場...")
-    yt_views = get_youtuber_views()
+    yt = get_youtuber_views()
     prof = get_professional_analysis()
-    moomoo = get_moomoo_analysis()
-    gordon = get_gordon_comments()
-    reddit = fetch_reddit_hot()
-
-    logger.info("📊 分析因子 & 現金流...")
+    mm = get_moomoo_analysis()
+    gd = get_gordon_comments()
+    rd = fetch_reddit_hot()
     mf = get_market_factors()
     gcf = get_global_cashflow()
+    sc = get_stock_connect()
 
     logger.info("📝 生成報告...")
-    html = generate_html(hx, wx, ai, hi, weekly_hx, yt_views, prof, moomoo, gordon, reddit, mf, gcf)
+    html = generate_html(hx, wx, ai, hi, whx, yt, prof, mm, gd, rd, mf, gcf, sc)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     path = os.path.join(OUTPUT_DIR, f"report_{t0.strftime('%Y%m%d')}.html")
