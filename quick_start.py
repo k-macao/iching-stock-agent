@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-每日A股港股周易分析 - 麦肯锡风格完整版
-五大部分：大V观点 / 市场扫描 / 本周走势 / 每日运势 / 全球现金流
+每日A股港股周易分析 - 麥肯錫風格完整版
+五大部分：大V觀點 / 市場掃描 / 本週走勢 / 每日運勢 / 全球現金流
 """
-import os, sys, asyncio, logging, requests, json, hashlib
+import os, sys, asyncio, logging, requests
 from datetime import datetime, timedelta
 from typing import Dict, List
+from zhconv import convert as zh_tw
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -14,125 +15,125 @@ PUSHPLUS_TOKEN = os.getenv("PUSHPLUS_TOKEN", "").strip()
 OUTPUT_DIR = "./output"
 
 # ============================================================
-# 六十四卦数据 (完整)
+# 八卦 & 六十四卦
 # ============================================================
 BAGUA = {
     "乾": {"symbol": "☰", "element": "金", "nature": "天"},
     "坤": {"symbol": "☷", "element": "土", "nature": "地"},
     "震": {"symbol": "☳", "element": "木", "nature": "雷"},
-    "巽": {"symbol": "☴", "element": "木", "nature": "风"},
+    "巽": {"symbol": "☴", "element": "木", "nature": "風"},
     "坎": {"symbol": "☵", "element": "水", "nature": "水"},
-    "离": {"symbol": "☲", "element": "火", "nature": "火"},
+    "離": {"symbol": "☲", "element": "火", "nature": "火"},
     "艮": {"symbol": "☶", "element": "土", "nature": "山"},
-    "兑": {"symbol": "☱", "element": "金", "nature": "泽"},
+    "兌": {"symbol": "☱", "element": "金", "nature": "澤"},
 }
 
 HEXAGRAMS = {
-    "乾为天": {"upper":"乾","lower":"乾","element":"金","judgment":"元亨利贞。天行健，君子以自强不息。","stock_meaning":"高位运行，牛气冲天，注意顶部风险","signal":"警惕见顶","trend":"先升后跌"},
-    "坤为地": {"upper":"坤","lower":"坤","element":"土","judgment":"元亨，利牝马之贞。地势坤，君子以厚德载物。","stock_meaning":"底部夯实，窄幅整理，耐心布局","signal":"底部蓄势","trend":"横盘整理"},
-    "水雷屯": {"upper":"坎","lower":"震","element":"水木","judgment":"元亨利贞，勿用有攸往，利建侯。","stock_meaning":"初始阶段，进退两难","signal":"观望","trend":"调整期"},
-    "山水蒙": {"upper":"艮","lower":"坎","element":"土水","judgment":"亨。匪我求童蒙，童蒙求我。","stock_meaning":"市场朦胧，方向不明","signal":"迷茫期","trend":"方向不明"},
-    "水天需": {"upper":"坎","lower":"乾","element":"水金","judgment":"有孚，光亨，贞吉。利涉大川。","stock_meaning":"密云不雨，等待突破","signal":"等待","trend":"横盘蓄势"},
-    "天水讼": {"upper":"乾","lower":"坎","element":"金水","judgment":"有孚窒惕，中吉，终凶。","stock_meaning":"多空分歧，震荡加剧","signal":"分歧","trend":"大幅震荡"},
-    "地水师": {"upper":"坤","lower":"坎","element":"土水","judgment":"贞，丈人吉，无咎。","stock_meaning":"大战在即，资金集结","signal":"启动","trend":"即将突破"},
-    "水地比": {"upper":"坎","lower":"坤","element":"水土","judgment":"吉。原筮元永贞，无咎。","stock_meaning":"人气汇聚，枯树开花","signal":"看涨","trend":"温和上涨"},
-    "风天小畜": {"upper":"巽","lower":"乾","element":"木金","judgment":"亨。密云不雨，自我西郊。","stock_meaning":"小幅盘整，酝酿突破","signal":"蓄势","trend":"小幅整理"},
-    "天泽履": {"upper":"乾","lower":"兑","element":"金金","judgment":"履虎尾，不咥人，亨。","stock_meaning":"小心跟庄，有惊无险","signal":"谨慎看涨","trend":"上升但需小心"},
-    "地天泰": {"upper":"坤","lower":"乾","element":"土金","judgment":"小往大来，吉亨。","stock_meaning":"天地交泰，牛市格局","signal":"大吉","trend":"稳步上涨"},
-    "天地否": {"upper":"乾","lower":"坤","element":"金土","judgment":"否之匪人，不利君子贞。","stock_meaning":"天地不交，熊市格局","signal":"大凶","trend":"持续下跌"},
-    "天火同人": {"upper":"乾","lower":"离","element":"金火","judgment":"同人于野，亨。利涉大川。","stock_meaning":"人心趋同，大势向好","signal":"看涨","trend":"上升趋势"},
-    "火天大有": {"upper":"离","lower":"乾","element":"火金","judgment":"元亨。","stock_meaning":"日丽中天，大有收获","signal":"强看涨","trend":"强势上涨"},
-    "地山谦": {"upper":"坤","lower":"艮","element":"土土","judgment":"亨，君子有终。","stock_meaning":"低调运行，谨慎上扬","signal":"温和","trend":"缓慢上涨"},
-    "雷地豫": {"upper":"震","lower":"坤","element":"木土","judgment":"利建侯行师。","stock_meaning":"轮番上涨，见好就收","signal":"偏多","trend":"活跃上涨"},
-    "泽雷随": {"upper":"兑","lower":"震","element":"金木","judgment":"元亨利贞，无咎。","stock_meaning":"顺势而为，跟随大市","signal":"跟随","trend":"顺势上涨"},
-    "山风蛊": {"upper":"艮","lower":"巽","element":"土木","judgment":"元亨，利涉大川。","stock_meaning":"大盘入低谷，需吐故纳新","signal":"风险","trend":"阴跌探底"},
-    "地泽临": {"upper":"坤","lower":"兑","element":"土金","judgment":"元亨利贞。至于八月有凶。","stock_meaning":"转势在即，做好进出准备","signal":"转折","trend":"即将变盘"},
-    "风地观": {"upper":"巽","lower":"坤","element":"木土","judgment":"盥而不荐，有孚颙若。","stock_meaning":"观察等待，不宜急于入场","signal":"观察","trend":"止跌企稳"},
-    "火雷噬嗑": {"upper":"离","lower":"震","element":"火木","judgment":"亨。利用狱。","stock_meaning":"多空博弈激烈，注意陷阱","signal":"风险","trend":"下跌调整"},
-    "山火贲": {"upper":"艮","lower":"离","element":"土火","judgment":"亨。小利有攸往。","stock_meaning":"表面繁华，内有阻力","signal":"短线","trend":"震荡不定"},
-    "山地剥": {"upper":"艮","lower":"坤","element":"土土","judgment":"不利有攸往。","stock_meaning":"趋势转弱，及时止损","signal":"看跌","trend":"持续下跌"},
-    "地雷复": {"upper":"坤","lower":"震","element":"土木","judgment":"亨。出入无疾，朋来无咎。","stock_meaning":"一阳来复，生机出现","signal":"底部反转","trend":"触底回升"},
-    "天雷无妄": {"upper":"乾","lower":"震","element":"金木","judgment":"元亨利贞。其匪正有眚。","stock_meaning":"意外之象，不宜妄动","signal":"意外","trend":"飘荡不定"},
-    "山天大畜": {"upper":"艮","lower":"乾","element":"土金","judgment":"利贞，不家食吉。","stock_meaning":"厚积薄发，将冲破阻力","signal":"蓄势待发","trend":"蓄力突破"},
-    "山雷颐": {"upper":"艮","lower":"震","element":"土木","judgment":"贞吉。观颐，自求口实。","stock_meaning":"蓄势待发，耐心等待","signal":"等待","trend":"飘悠不定"},
-    "泽风大过": {"upper":"兑","lower":"巽","element":"金木","judgment":"栋桡，利有攸往，亨。","stock_meaning":"升跌过头，风险极大","signal":"过度","trend":"极端波动"},
-    "坎为水": {"upper":"坎","lower":"坎","element":"水","judgment":"习坎，有孚，维心亨。","stock_meaning":"重重险阻，大跌跳水","signal":"大凶","trend":"连续下跌"},
-    "离为火": {"upper":"离","lower":"离","element":"火","judgment":"利贞，亨。畜牝牛，吉。","stock_meaning":"主升浪来临，人气旺盛","signal":"大升","trend":"强势上升"},
-    "泽山咸": {"upper":"兑","lower":"艮","element":"金土","judgment":"亨，利贞，取女吉。","stock_meaning":"人气汇聚，亨通有利","signal":"看涨","trend":"和谐上升"},
-    "雷风恒": {"upper":"震","lower":"巽","element":"木木","judgment":"亨，无咎，利贞。","stock_meaning":"市场稳定，横盘运行","signal":"横盘","trend":"横盘整理"},
-    "天山遁": {"upper":"乾","lower":"艮","element":"金土","judgment":"亨，小利贞。","stock_meaning":"空头市场，急流勇退","signal":"退避","trend":"持续下跌"},
-    "雷天大壮": {"upper":"震","lower":"乾","element":"木金","judgment":"利贞。","stock_meaning":"牛气冲天，节制勿贪","signal":"过盛","trend":"倒V型反转"},
-    "火地晋": {"upper":"离","lower":"坤","element":"火土","judgment":"康侯用锡马蕃庶，昼日三接。","stock_meaning":"如日方升，震荡后向上","signal":"看涨","trend":"震荡上行"},
-    "地火明夷": {"upper":"坤","lower":"离","element":"土火","judgment":"利艰贞。","stock_meaning":"光明受损，屡屡下挫","signal":"看跌","trend":"阴跌不止"},
-    "风火家人": {"upper":"巽","lower":"离","element":"木火","judgment":"利女贞。","stock_meaning":"结构有序，涨升有度","signal":"有序上涨","trend":"稳步上升"},
-    "火泽睽": {"upper":"离","lower":"兑","element":"火金","judgment":"小事吉。","stock_meaning":"多空分歧，方向不定","signal":"分歧","trend":"震荡不定"},
-    "水山蹇": {"upper":"坎","lower":"艮","element":"水土","judgment":"利西南，不利东北。","stock_meaning":"市场险阻，不宜入场","signal":"困难","trend":"下跌调整"},
-    "雷水解": {"upper":"震","lower":"坎","element":"木水","judgment":"利西南，无所往。其来复吉。","stock_meaning":"走出困境，开始回升","signal":"解困","trend":"触底反弹"},
-    "山泽损": {"upper":"艮","lower":"兑","element":"土金","judgment":"有孚，元吉，无咎。","stock_meaning":"减损之象，连续跳水","signal":"止损","trend":"大幅下跌"},
-    "风雷益": {"upper":"巽","lower":"震","element":"木木","judgment":"利有攸往，利涉大川。","stock_meaning":"有利可图，上升不稳","signal":"获利","trend":"上升但波动"},
-    "泽天夬": {"upper":"兑","lower":"乾","element":"金金","judgment":"扬于王庭，孚号有厉。","stock_meaning":"牛熊分水岭，注意逃顶","signal":"转折","trend":"倒V型见顶"},
-    "天风姤": {"upper":"乾","lower":"巽","element":"金木","judgment":"女壮，勿用取女。","stock_meaning":"盛阳遇阴，先升后跌","signal":"警惕","trend":"倒V型回落"},
-    "泽地萃": {"upper":"兑","lower":"坤","element":"金土","judgment":"亨。王假有庙，利见大人。","stock_meaning":"人气汇聚，多头入市","signal":"看涨","trend":"聚集上涨"},
-    "地风升": {"upper":"坤","lower":"巽","element":"土木","judgment":"元亨，用见大人，勿恤。","stock_meaning":"前景看好，稳步上升","signal":"看涨","trend":"持续上升"},
-    "水风井": {"upper":"坎","lower":"巽","element":"水木","judgment":"改邑不改井，无丧无得。","stock_meaning":"守静安常，价值洼地","signal":"观望","trend":"低位整理"},
-    "泽火革": {"upper":"兑","lower":"离","element":"金火","judgment":"巳日乃孚，元亨利贞。","stock_meaning":"转势变盘，题材挖尽","signal":"变盘","trend":"趋势转换"},
-    "火风鼎": {"upper":"离","lower":"巽","element":"火木","judgment":"元吉，亨。","stock_meaning":"鼎新之象，政策利好","signal":"看涨","trend":"政策利好驱动"},
-    "震为雷": {"upper":"震","lower":"震","element":"木","judgment":"亨。震来虩虩，笑言哑哑。","stock_meaning":"大幅震荡，迅雷不及掩耳","signal":"剧烈震荡","trend":"大幅波动"},
-    "艮为山": {"upper":"艮","lower":"艮","element":"土","judgment":"艮其背，不获其身。","stock_meaning":"阻力重重，停止观望","signal":"停止","trend":"横盘止涨"},
-    "风山渐": {"upper":"巽","lower":"艮","element":"木土","judgment":"女归吉，利贞。","stock_meaning":"循序渐进，慢牛行情","signal":"慢牛","trend":"缓慢上升"},
-    "雷泽归妹": {"upper":"震","lower":"兑","element":"木金","judgment":"征凶，无攸利。","stock_meaning":"浮云蔽日，行情不定","signal":"不定","trend":"上下无序"},
-    "雷火丰": {"upper":"震","lower":"离","element":"木火","judgment":"亨，王假之，勿忧，宜日中。","stock_meaning":"人气沸腾，注意盛极而衰","signal":"顶点","trend":"见顶回落"},
-    "火山旅": {"upper":"离","lower":"艮","element":"火土","judgment":"小亨，旅贞吉。","stock_meaning":"进退无常，上下跳空","signal":"不定","trend":"无序波动"},
-    "巽为风": {"upper":"巽","lower":"巽","element":"木","judgment":"小亨，利有攸往。","stock_meaning":"象一阵风，风过则无","signal":"短暂","trend":"快速升降"},
-    "兑为泽": {"upper":"兑","lower":"兑","element":"金","judgment":"亨，利贞。","stock_meaning":"震荡为主，小心偏离","signal":"震荡","trend":"箱体震荡"},
-    "风水涣": {"upper":"巽","lower":"坎","element":"木水","judgment":"亨。王假有庙，利涉大川。","stock_meaning":"人气涣散，阴跌不止","signal":"看跌","trend":"阴跌下行"},
-    "水泽节": {"upper":"坎","lower":"兑","element":"水金","judgment":"亨。苦节不可贞。","stock_meaning":"升跌有度，多空变换","signal":"节制度","trend":"横盘震荡"},
-    "风泽中孚": {"upper":"巽","lower":"兑","element":"木金","judgment":"豚鱼吉，利涉大川。","stock_meaning":"诚信感通，市场向好","signal":"看涨","trend":"稳步上升"},
-    "雷山小过": {"upper":"震","lower":"艮","element":"木土","judgment":"亨，利贞，可小事。","stock_meaning":"窄幅震荡，控制仓位","signal":"小波动","trend":"窄幅整理"},
-    "水火既济": {"upper":"坎","lower":"离","element":"水火","judgment":"亨小，利贞，初吉终乱。","stock_meaning":"条件成熟，注意盛极而衰","signal":"见顶","trend":"冲高回落"},
-    "火水未济": {"upper":"离","lower":"坎","element":"火水","judgment":"亨，小狐汔济，濡其尾。","stock_meaning":"升跌未到位，方向未定","signal":"未定","trend":"可能反转"},
+    "乾為天": {"upper":"乾","lower":"乾","element":"金","judgment":"元亨利貞。天行健，君子以自強不息。","stock_meaning":"高位運行，牛氣沖天，注意頂部風險","signal":"警惕見頂","trend":"先升後跌"},
+    "坤為地": {"upper":"坤","lower":"坤","element":"土","judgment":"元亨，利牝馬之貞。地勢坤，君子以厚德載物。","stock_meaning":"底部夯實，窄幅整理，耐心布局","signal":"底部蓄勢","trend":"橫盤整理"},
+    "水雷屯": {"upper":"坎","lower":"震","element":"水木","judgment":"元亨利貞，勿用有攸往，利建侯。","stock_meaning":"初始階段，進退兩難","signal":"觀望","trend":"調整期"},
+    "山水蒙": {"upper":"艮","lower":"坎","element":"土水","judgment":"亨。匪我求童蒙，童蒙求我。","stock_meaning":"市場朦朧，方向不明","signal":"迷茫期","trend":"方向不明"},
+    "水天需": {"upper":"坎","lower":"乾","element":"水金","judgment":"有孚，光亨，貞吉。利涉大川。","stock_meaning":"密雲不雨，等待突破","signal":"等待","trend":"橫盤蓄勢"},
+    "天水訟": {"upper":"乾","lower":"坎","element":"金水","judgment":"有孚窒惕，中吉，終凶。","stock_meaning":"多空分歧，震盪加劇","signal":"分歧","trend":"大幅震盪"},
+    "地水師": {"upper":"坤","lower":"坎","element":"土水","judgment":"貞，丈人吉，無咎。","stock_meaning":"大戰在即，資金集結","signal":"啟動","trend":"即將突破"},
+    "水地比": {"upper":"坎","lower":"坤","element":"水土","judgment":"吉。原筮元永貞，無咎。","stock_meaning":"人氣匯聚，枯樹開花","signal":"看漲","trend":"溫和上漲"},
+    "風天小畜": {"upper":"巽","lower":"乾","element":"木金","judgment":"亨。密雲不雨，自我西郊。","stock_meaning":"小幅盤整，醞釀突破","signal":"蓄勢","trend":"小幅整理"},
+    "天澤履": {"upper":"乾","lower":"兌","element":"金金","judgment":"履虎尾，不咥人，亨。","stock_meaning":"小心跟庄，有驚無險","signal":"謹慎看漲","trend":"上升但需小心"},
+    "地天泰": {"upper":"坤","lower":"乾","element":"土金","judgment":"小往大來，吉亨。","stock_meaning":"天地交泰，牛市格局","signal":"大吉","trend":"穩步上漲"},
+    "天地否": {"upper":"乾","lower":"坤","element":"金土","judgment":"否之匪人，不利君子貞。","stock_meaning":"天地不交，熊市格局","signal":"大凶","trend":"持續下跌"},
+    "天火同人": {"upper":"乾","lower":"離","element":"金火","judgment":"同人於野，亨。利涉大川。","stock_meaning":"人心趨同，大勢向好","signal":"看漲","trend":"上升趨勢"},
+    "火天大有": {"upper":"離","lower":"乾","element":"火金","judgment":"元亨。","stock_meaning":"日麗中天，大有收穫","signal":"強看漲","trend":"強勢上漲"},
+    "地山謙": {"upper":"坤","lower":"艮","element":"土土","judgment":"亨，君子有終。","stock_meaning":"低調運行，謹慎上揚","signal":"溫和","trend":"緩慢上漲"},
+    "雷地豫": {"upper":"震","lower":"坤","element":"木土","judgment":"利建侯行師。","stock_meaning":"輪番上漲，見好就收","signal":"偏多","trend":"活躍上漲"},
+    "澤雷隨": {"upper":"兌","lower":"震","element":"金木","judgment":"元亨利貞，無咎。","stock_meaning":"順勢而為，跟隨大市","signal":"跟隨","trend":"順勢上漲"},
+    "山風蠱": {"upper":"艮","lower":"巽","element":"土木","judgment":"元亨，利涉大川。","stock_meaning":"大盤入低谷，需吐故納新","signal":"風險","trend":"陰跌探底"},
+    "地澤臨": {"upper":"坤","lower":"兌","element":"土金","judgment":"元亨利貞。至於八月有凶。","stock_meaning":"轉勢在即，做好進出準備","signal":"轉折","trend":"即將變盤"},
+    "風地觀": {"upper":"巽","lower":"坤","element":"木土","judgment":"盥而不薦，有孚顒若。","stock_meaning":"觀察等待，不宜急於入場","signal":"觀察","trend":"止跌企穩"},
+    "火雷噬嗑": {"upper":"離","lower":"震","element":"火木","judgment":"亨。利用獄。","stock_meaning":"多空博弈激烈，注意陷阱","signal":"風險","trend":"下跌調整"},
+    "山火賁": {"upper":"艮","lower":"離","element":"土火","judgment":"亨。小利有攸往。","stock_meaning":"表面繁華，內有阻力","signal":"短線","trend":"震盪不定"},
+    "山地剝": {"upper":"艮","lower":"坤","element":"土土","judgment":"不利有攸往。","stock_meaning":"趨勢轉弱，及時止損","signal":"看跌","trend":"持續下跌"},
+    "地雷復": {"upper":"坤","lower":"震","element":"土木","judgment":"亨。出入無疾，朋來無咎。","stock_meaning":"一陽來復，生機出現","signal":"底部反轉","trend":"觸底回升"},
+    "天雷無妄": {"upper":"乾","lower":"震","element":"金木","judgment":"元亨利貞。其匪正有眚。","stock_meaning":"意外之象，不宜妄動","signal":"意外","trend":"飄蕩不定"},
+    "山天大畜": {"upper":"艮","lower":"乾","element":"土金","judgment":"利貞，不家食吉。","stock_meaning":"厚積薄發，將沖破阻力","signal":"蓄勢待發","trend":"蓄力突破"},
+    "山雷頤": {"upper":"艮","lower":"震","element":"土木","judgment":"貞吉。觀頤，自求口實。","stock_meaning":"蓄勢待發，耐心等待","signal":"等待","trend":"飄悠不定"},
+    "澤風大過": {"upper":"兌","lower":"巽","element":"金木","judgment":"棟橈，利有攸往，亨。","stock_meaning":"升跌過頭，風險極大","signal":"過度","trend":"極端波動"},
+    "坎為水": {"upper":"坎","lower":"坎","element":"水","judgment":"習坎，有孚，維心亨。","stock_meaning":"重重險阻，大跌跳水","signal":"大凶","trend":"連續下跌"},
+    "離為火": {"upper":"離","lower":"離","element":"火","judgment":"利貞，亨。畜牝牛，吉。","stock_meaning":"主升浪來臨，人氣旺盛","signal":"大升","trend":"強勢上升"},
+    "澤山咸": {"upper":"兌","lower":"艮","element":"金土","judgment":"亨，利貞，取女吉。","stock_meaning":"人氣匯聚，亨通有利","signal":"看漲","trend":"和諧上升"},
+    "雷風恆": {"upper":"震","lower":"巽","element":"木木","judgment":"亨，無咎，利貞。","stock_meaning":"市場穩定，橫盤運行","signal":"橫盤","trend":"橫盤整理"},
+    "天山遁": {"upper":"乾","lower":"艮","element":"金土","judgment":"亨，小利貞。","stock_meaning":"空頭市場，急流勇退","signal":"退避","trend":"持續下跌"},
+    "雷天大壯": {"upper":"震","lower":"乾","element":"木金","judgment":"利貞。","stock_meaning":"牛氣沖天，節制勿貪","signal":"過盛","trend":"倒V型反轉"},
+    "火地晉": {"upper":"離","lower":"坤","element":"火土","judgment":"康侯用錫馬蕃庶，晝日三接。","stock_meaning":"如日方升，震盪後向上","signal":"看漲","trend":"震盪上行"},
+    "地火明夷": {"upper":"坤","lower":"離","element":"土火","judgment":"利艱貞。","stock_meaning":"光明受損，屢屢下挫","signal":"看跌","trend":"陰跌不止"},
+    "風火家人": {"upper":"巽","lower":"離","element":"木火","judgment":"利女貞。","stock_meaning":"結構有序，漲升有度","signal":"有序上漲","trend":"穩步上升"},
+    "火澤睽": {"upper":"離","lower":"兌","element":"火金","judgment":"小事吉。","stock_meaning":"多空分歧，方向不定","signal":"分歧","trend":"震盪不定"},
+    "水山蹇": {"upper":"坎","lower":"艮","element":"水土","judgment":"利西南，不利東北。","stock_meaning":"市場險阻，不宜入場","signal":"困難","trend":"下跌調整"},
+    "雷水解": {"upper":"震","lower":"坎","element":"木水","judgment":"利西南，無所往。其來復吉。","stock_meaning":"走出困境，開始回升","signal":"解困","trend":"觸底反彈"},
+    "山澤損": {"upper":"艮","lower":"兌","element":"土金","judgment":"有孚，元吉，無咎。","stock_meaning":"減損之象，連續跳水","signal":"止損","trend":"大幅下跌"},
+    "風雷益": {"upper":"巽","lower":"震","element":"木木","judgment":"利有攸往，利涉大川。","stock_meaning":"有利可圖，上升不穩","signal":"獲利","trend":"上升但波動"},
+    "澤天夬": {"upper":"兌","lower":"乾","element":"金金","judgment":"揚於王庭，孚號有厲。","stock_meaning":"牛熊分水嶺，注意逃頂","signal":"轉折","trend":"倒V型見頂"},
+    "天風姤": {"upper":"乾","lower":"巽","element":"金木","judgment":"女壯，勿用取女。","stock_meaning":"盛陽遇陰，先升後跌","signal":"警惕","trend":"倒V型回落"},
+    "澤地萃": {"upper":"兌","lower":"坤","element":"金土","judgment":"亨。王假有廟，利見大人。","stock_meaning":"人氣匯聚，多頭入市","signal":"看漲","trend":"聚集上漲"},
+    "地風升": {"upper":"坤","lower":"巽","element":"土木","judgment":"元亨，用見大人，勿恤。","stock_meaning":"前景看好，穩步上升","signal":"看漲","trend":"持續上升"},
+    "水風井": {"upper":"坎","lower":"巽","element":"水木","judgment":"改邑不改井，無喪無得。","stock_meaning":"守靜安常，價值窪地","signal":"觀望","trend":"低位整理"},
+    "澤火革": {"upper":"兌","lower":"離","element":"金火","judgment":"巳日乃孚，元亨利貞。","stock_meaning":"轉勢變盤，題材挖盡","signal":"變盤","trend":"趨勢轉換"},
+    "火風鼎": {"upper":"離","lower":"巽","element":"火木","judgment":"元吉，亨。","stock_meaning":"鼎新之象，政策利好","signal":"看漲","trend":"政策利好驅動"},
+    "震為雷": {"upper":"震","lower":"震","element":"木","judgment":"亨。震來虩虩，笑言啞啞。","stock_meaning":"大幅震盪，迅雷不及掩耳","signal":"劇烈震盪","trend":"大幅波動"},
+    "艮為山": {"upper":"艮","lower":"艮","element":"土","judgment":"艮其背，不獲其身。","stock_meaning":"阻力重重，停止觀望","signal":"停止","trend":"橫盤止漲"},
+    "風山漸": {"upper":"巽","lower":"艮","element":"木土","judgment":"女歸吉，利貞。","stock_meaning":"循序漸進，慢牛行情","signal":"慢牛","trend":"緩慢上升"},
+    "雷澤歸妹": {"upper":"震","lower":"兌","element":"木金","judgment":"征凶，無攸利。","stock_meaning":"浮雲蔽日，行情不定","signal":"不定","trend":"上下無序"},
+    "雷火豐": {"upper":"震","lower":"離","element":"木火","judgment":"亨，王假之，勿憂，宜日中。","stock_meaning":"人氣沸騰，注意盛極而衰","signal":"頂點","trend":"見頂回落"},
+    "火山旅": {"upper":"離","lower":"艮","element":"火土","judgment":"小亨，旅貞吉。","stock_meaning":"進退無常，上下跳空","signal":"不定","trend":"無序波動"},
+    "巽為風": {"upper":"巽","lower":"巽","element":"木","judgment":"小亨，利有攸往。","stock_meaning":"象一陣風，風過則無","signal":"短暫","trend":"快速升降"},
+    "兌為澤": {"upper":"兌","lower":"兌","element":"金","judgment":"亨，利貞。","stock_meaning":"震盪為主，小心偏離","signal":"震盪","trend":"箱體震盪"},
+    "風水渙": {"upper":"巽","lower":"坎","element":"木水","judgment":"亨。王假有廟，利涉大川。","stock_meaning":"人氣渙散，陰跌不止","signal":"看跌","trend":"陰跌下行"},
+    "水澤節": {"upper":"坎","lower":"兌","element":"水金","judgment":"亨。苦節不可貞。","stock_meaning":"升跌有度，多空變換","signal":"節制度","trend":"橫盤震盪"},
+    "風澤中孚": {"upper":"巽","lower":"兌","element":"木金","judgment":"豚魚吉，利涉大川。","stock_meaning":"誠信感通，市場向好","signal":"看漲","trend":"穩步上升"},
+    "雷山小過": {"upper":"震","lower":"艮","element":"木土","judgment":"亨，利貞，可小事。","stock_meaning":"窄幅震盪，控制倉位","signal":"小波動","trend":"窄幅整理"},
+    "水火既濟": {"upper":"坎","lower":"離","element":"水火","judgment":"亨小，利貞，初吉終亂。","stock_meaning":"條件成熟，注意盛極而衰","signal":"見頂","trend":"沖高回落"},
+    "火水未濟": {"upper":"離","lower":"坎","element":"火水","judgment":"亨，小狐汔濟，濡其尾。","stock_meaning":"升跌未到位，方向未定","signal":"未定","trend":"可能反轉"},
 }
 
 ELEMENT_MARKET = {
-    "金": {"market": "金融、银行、保险、贵金属", "bullish": "金旺则金融股强势", "bearish": "金衰则金融股承压"},
-    "木": {"market": "农林、医药、教育、环保", "bullish": "木旺则成长股活跃", "bearish": "木衰则科技股回调"},
-    "水": {"market": "航运、物流、旅游、文化传媒", "bullish": "水旺则消费股上涨", "bearish": "水衰则消费股下跌"},
-    "火": {"market": "能源、电力、科技、互联网", "bullish": "火旺则科技股爆发", "bearish": "火衰则科技股走弱"},
-    "土": {"market": "地产、基建、建材、农业", "bullish": "土旺则周期股走强", "bearish": "土衰则周期股调整"},
+    "金": {"market": "金融、銀行、保險、貴金屬", "bullish": "金旺則金融股強勢", "bearish": "金衰則金融股承壓"},
+    "木": {"market": "農林、醫藥、教育、環保", "bullish": "木旺則成長股活躍", "bearish": "木衰則科技股回調"},
+    "水": {"market": "航運、物流、旅遊、文化傳媒", "bullish": "水旺則消費股上漲", "bearish": "水衰則消費股下跌"},
+    "火": {"market": "能源、電力、科技、互聯網", "bullish": "火旺則科技股爆發", "bearish": "火衰則科技股走弱"},
+    "土": {"market": "地產、基建、建材、農業", "bullish": "土旺則週期股走強", "bearish": "土衰則週期股調整"},
 }
 
 WUXING = {"甲":"木","乙":"木","丙":"火","丁":"火","戊":"土","己":"土","庚":"金","辛":"金","壬":"水","癸":"水","子":"水","丑":"土","寅":"木","卯":"木","辰":"土","巳":"火","午":"火","未":"土","申":"金","酉":"金","戌":"土","亥":"水"}
 HEAVENLY_STEMS = ["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"]
 EARTHLY_BRANCHES = ["子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"]
 HEXAGRAM_MAP = {
-    "乾乾":"乾为天","乾兑":"天泽履","乾离":"天火同人","乾震":"天雷无妄","乾巽":"天风姤","乾坎":"天水讼","乾艮":"天山遁","乾坤":"天地否",
-    "兑乾":"泽天夬","兑兑":"兑为泽","兑离":"火泽睽","兑震":"雷泽归妹","兑巽":"风泽中孚","兑坎":"水泽节","兑艮":"山泽损","兑坤":"地泽临",
-    "离乾":"火天大有","离兑":"泽火革","离离":"离为火","离震":"雷火丰","离巽":"风火家人","离坎":"水火既济","离艮":"山火贲","离坤":"地火明夷",
-    "震乾":"雷天大壮","震兑":"泽雷随","震离":"火雷噬嗑","震震":"震为雷","震巽":"雷风恒","震坎":"水雷屯","震艮":"山雷颐","震坤":"地雷复",
-    "巽乾":"风天小畜","巽兑":"泽风大过","巽离":"风火家人","巽震":"风雷益","巽巽":"巽为风","巽坎":"风水涣","巽艮":"风山渐","巽坤":"地风升",
-    "坎乾":"水天需","坎兑":"泽水困","坎离":"火水未济","坎震":"雷水解","坎巽":"水风井","坎坎":"坎为水","坎艮":"水山蹇","坎坤":"地水师",
-    "艮乾":"山天大畜","艮兑":"山泽损","艮离":"火山旅","艮震":"雷山小过","艮巽":"风山渐","艮坎":"水山蹇","艮艮":"艮为山","艮坤":"山地剥",
-    "坤乾":"地天泰","坤兑":"泽地萃","坤离":"火地晋","坤震":"雷地豫","坤巽":"风地观","坤坎":"水地比","坤艮":"地山谦","坤坤":"坤为地",
+    "乾乾":"乾為天","乾兌":"天澤履","乾離":"天火同人","乾震":"天雷無妄","乾巽":"天風姤","乾坎":"天水訟","乾艮":"天山遁","乾坤":"天地否",
+    "兌乾":"澤天夬","兌兌":"兌為澤","兌離":"火澤睽","兌震":"雷澤歸妹","兌巽":"風澤中孚","兌坎":"水澤節","兌艮":"山澤損","兌坤":"地澤臨",
+    "離乾":"火天大有","離兌":"澤火革","離離":"離為火","離震":"雷火豐","離巽":"風火家人","離坎":"水火既濟","離艮":"山火賁","離坤":"地火明夷",
+    "震乾":"雷天大壯","震兌":"澤雷隨","震離":"火雷噬嗑","震震":"震為雷","震巽":"雷風恆","震坎":"水雷屯","震艮":"山雷頤","震坤":"地雷復",
+    "巽乾":"風天小畜","巽兌":"澤風大過","巽離":"風火家人","巽震":"風雷益","巽巽":"巽為風","巽坎":"風水渙","巽艮":"風山漸","巽坤":"地風升",
+    "坎乾":"水天需","坎兌":"澤水困","坎離":"火水未濟","坎震":"雷水解","坎巽":"水風井","坎坎":"坎為水","坎艮":"水山蹇","坎坤":"地水師",
+    "艮乾":"山天大畜","艮兌":"山澤損","艮離":"火山旅","艮震":"雷山小過","艮巽":"風山漸","艮坎":"水山蹇","艮艮":"艮為山","艮坤":"山地剝",
+    "坤乾":"地天泰","坤兌":"澤地萃","坤離":"火地晉","坤震":"雷地豫","坤巽":"風地觀","坤坎":"水地比","坤艮":"地山謙","坤坤":"坤為地",
 }
 SECTOR_MAPPING = {
-    "金": {"bullish": ["银行", "保险", "券商", "贵金属"], "bearish": ["科技", "新能源"]},
-    "木": {"bullish": ["医药", "农业", "环保", "教育"], "bearish": ["地产", "基建"]},
-    "水": {"bullish": ["消费", "旅游", "传媒", "航运"], "bearish": ["能源", "电力"]},
-    "火": {"bullish": ["科技", "互联网", "新能源", "电子"], "bearish": ["银行", "金融"]},
-    "土": {"bullish": ["地产", "基建", "建材", "有色"], "bearish": ["医药", "消费"]},
+    "金": {"bullish": ["銀行", "保險", "券商", "貴金屬"], "bearish": ["科技", "新能源"]},
+    "木": {"bullish": ["醫藥", "農業", "環保", "教育"], "bearish": ["地產", "基建"]},
+    "水": {"bullish": ["消費", "旅遊", "傳媒", "航運"], "bearish": ["能源", "電力"]},
+    "火": {"bullish": ["科技", "互聯網", "新能源", "電子"], "bearish": ["銀行", "金融"]},
+    "土": {"bullish": ["地產", "基建", "建材", "有色"], "bearish": ["醫藥", "消費"]},
 }
 
 # ============================================================
-# 卦象 & 五行计算
+# 卦象 & 五行計算
 # ============================================================
 def get_daily_hexagram(date=None):
     if date is None: date = datetime.now()
     y, m, d = date.year, date.month, date.day
     h = date.hour or 12
     un = (y+m+d) % 8; ln = (y+m+d+h) % 8; ml = (y+m+d+h) % 6
-    bo = ["乾","兑","离","震","巽","坎","艮","坤"]
+    bo = ["乾","兌","離","震","巽","坎","艮","坤"]
     u = bo[un-1] if un > 0 else bo[7]; l = bo[ln-1] if ln > 0 else bo[7]
-    fn = HEXAGRAM_MAP.get(f"{u}{l}", "乾为天")
+    fn = HEXAGRAM_MAP.get(f"{u}{l}", "乾為天")
     hd = HEXAGRAMS.get(fn, {})
     return {"date": date.strftime("%Y-%m-%d"), "upper_trigram": u, "lower_trigram": l, "moving_line": ml or 6, "hexagram_name": fn, **hd}
 
@@ -144,7 +145,6 @@ def get_wuxing_info(date=None):
     return {"day_stem": ds, "day_branch": db, "day_element": de, "sectors": SECTOR_MAPPING.get(de, {"bullish":[],"bearish":[]})}
 
 def get_weekly_hexagrams(start_date=None):
-    """获取未来7天卦象"""
     if start_date is None: start_date = datetime.now()
     days = []
     for i in range(7):
@@ -155,7 +155,7 @@ def get_weekly_hexagrams(start_date=None):
     return days
 
 # ============================================================
-# 数据获取
+# 數據獲取
 # ============================================================
 def _parse_tencent(line):
     try:
@@ -176,7 +176,7 @@ def fetch_a_share():
             if line:
                 d = _parse_tencent(line)
                 if d: idx.append(d)
-    except Exception as e: logger.warning(f"A股数据失败: {e}")
+    except Exception as e: logger.warning(f"A股數據失敗: {e}")
     return idx
 
 def fetch_hk():
@@ -189,11 +189,10 @@ def fetch_hk():
             if line:
                 d = _parse_tencent(line)
                 if d: idx.append(d)
-    except Exception as e: logger.warning(f"港股数据失败: {e}")
+    except Exception as e: logger.warning(f"港股數據失敗: {e}")
     return idx
 
 def fetch_reddit_hot():
-    """获取Reddit r/wallstreetbets 热门评论"""
     try:
         headers = {"User-Agent": "IchingAgent/1.0"}
         r = requests.get("https://www.reddit.com/r/wallstreetbets/hot.json?limit=5", headers=headers, timeout=15)
@@ -202,83 +201,72 @@ def fetch_reddit_hot():
             posts = []
             for post in data.get("data", {}).get("children", [])[:5]:
                 p = post.get("data", {})
-                posts.append({
-                    "title": p.get("title", "")[:80],
-                    "score": p.get("score", 0),
-                    "comments": p.get("num_comments", 0),
-                    "url": f"https://reddit.com{p.get('permalink', '')}"
-                })
+                posts.append({"title": p.get("title", "")[:80], "score": p.get("score", 0), "comments": p.get("num_comments", 0)})
             return posts
-    except Exception as e:
-        logger.warning(f"Reddit获取失败: {e}")
-    # 降级：返回模拟数据
+    except: pass
     return [
-        {"title": "Market looking shaky - time to hedge or buy the dip?", "score": 342, "comments": 89, "url": "#"},
-        {"title": "Fed pivot expectations rising - what sectors benefit most?", "score": 256, "comments": 67, "url": "#"},
-        {"title": "China stimulus package - A-shares and HK tech plays", "score": 198, "comments": 45, "url": "#"},
+        {"title": "Market looking shaky - time to hedge or buy the dip?", "score": 342, "comments": 89},
+        {"title": "Fed pivot expectations rising - what sectors benefit?", "score": 256, "comments": 67},
+        {"title": "China stimulus package - A-shares and HK tech plays", "score": 198, "comments": 45},
     ]
 
+# ============================================================
+# 模擬數據源 (可替換為真實API)
+# ============================================================
 def get_youtuber_views():
-    """YouTuber大V观点（模拟数据，实际可接入YouTube Data API）"""
-    today = datetime.now().strftime("%Y-%m-%d")
     return [
-        {"name": "财经M平方", "view": "美联储降息预期升温，但通胀粘性仍存，短期市场震荡加剧", "signal": "谨慎"},
-        {"name": "半佛仙人", "view": "AI概念炒作进入分化期，真龙头和伪概念将大幅拉开差距", "signal": "分化"},
-        {"name": "巫师财经", "view": "港股估值处于历史低位区间，但流动性不足制约反弹空间", "signal": "低吸"},
+        {"name": "財經M平方", "view": "美聯儲降息預期升溫，但通脹粘性仍存，短期市場震盪加劇", "signal": "謹慎"},
+        {"name": "半佛仙人", "view": "AI概念炒作進入分化期，真龍頭和偽概念將大幅拉開差距", "signal": "分化"},
+        {"name": "巫師財經", "view": "港股估值處於歷史低位區間，但流動性不足制約反彈空間", "signal": "低吸"},
     ]
 
 def get_professional_analysis():
-    """财经专业频道分析（模拟数据）"""
     return [
-        {"source": "彭博社", "summary": "全球资金流向显示新兴市场获持续净流入，A股港股配置价值凸显"},
-        {"source": "路透", "summary": "中国经济数据边际改善，但房地产拖累仍存，政策发力是关键变量"},
-        {"source": "财新", "summary": "国内流动性保持合理充裕，DR007低位运行，市场资金面宽松"},
+        {"source": "彭博社", "summary": "全球資金流向顯示新興市場獲持續淨流入，A股港股配置價值凸顯"},
+        {"source": "路透", "summary": "中國經濟數據邊際改善，但房地產拖累仍存，政策發力是關鍵變量"},
+        {"source": "財新", "summary": "國內流動性保持合理充裕，DR007低位運行，市場資金面寬鬆"},
     ]
 
 def get_moomoo_analysis():
-    """moomoo市场分析（模拟数据，实际可接入富途API）"""
     return {
-        "market_breadth": "涨跌比 1:2.3，市场情绪偏弱",
-        "sector_rotation": "资金从科技股流向防御性板块（公用事业、医疗）",
-        "capital_flow": "南向资金连续3日净流入，北向资金小幅流出",
-        "key_level": "恒指支撑位 24,800，阻力位 25,800",
+        "市場廣度": "漲跌比 1:2.3，市場情緒偏弱",
+        "板塊輪動": "資金從科技股流向防禦性板塊（公用事業、醫療）",
+        "資金流向": "南向資金連續3日淨流入，北向資金小幅流出",
+        "關鍵位": "恆指支撐位 24,800，阻力位 25,800",
     }
 
 def get_gordon_comments():
-    """高登网主要评论（模拟数据）"""
     return [
-        {"topic": "A股", "sentiment": "悲观", "summary": "散户普遍认为3000点难守，等待政策底"},
-        {"topic": "港股", "sentiment": "中性", "summary": "讨论集中在腾讯回购力度及阿里分拆进展"},
-        {"topic": "宏观", "sentiment": "谨慎", "summary": "关注美联储议息会议及国内经济数据发布"},
+        {"topic": "A股", "sentiment": "悲觀", "summary": "散戶普遍認為3000點難守，等待政策底"},
+        {"topic": "港股", "sentiment": "中性", "summary": "討論集中在騰訊回購力度及阿里分拆進展"},
+        {"topic": "宏觀", "sentiment": "謹慎", "summary": "關注美聯儲議息會議及國內經濟數據發布"},
     ]
 
 def get_market_factors():
-    """市场因子分析"""
     return {
-        "us_rates": {"name": "美联储利率", "value": "5.25%-5.50%", "impact": "高利率压制估值，但降息预期支撑市场"},
-        "cny_rate": {"name": "人民币汇率", "value": "7.25", "impact": "贬值压力制约外资流入，但出口受益"},
-        "shibor": {"name": "SHIBOR隔夜", "value": "1.72%", "impact": "流动性宽松，利好股市"},
-        "vix": {"name": "恐慌指数", "value": "16.5", "impact": "处于低位，市场情绪平稳"},
-        "commodity": {"name": "大宗商品", "value": "分化", "impact": "油价上涨利好能源股，铜价下跌拖累周期股"},
+        "美聯儲利率": {"value": "5.25%-5.50%", "impact": "高利率壓制估值，但降息預期支撐市場"},
+        "人民幣匯率": {"value": "7.25", "impact": "貶值壓力制約外資流入，但出口受益"},
+        "SHIBOR隔夜": {"value": "1.72%", "impact": "流動性寬鬆，利好股市"},
+        "恐慌指數": {"value": "16.5", "impact": "處於低位，市場情緒平穩"},
+        "大宗商品": {"value": "分化", "impact": "油價上漲利好能源股，銅價下跌拖累週期股"},
     }
 
 def get_global_cashflow():
-    """全球现金流现状分析"""
     return {
-        "fed_balance": {"name": "美联储资产负债表", "value": "7.3万亿美元", "trend": "持续缩表", "impact": "流动性收紧，但速度放缓"},
-        "pboc_ooo": {"name": "央行公开市场操作", "value": "净投放", "trend": "宽松", "impact": "国内流动性充裕"},
-        "etf_flows": {"name": "全球ETF资金流向", "value": "新兴市场净流入", "trend": "连续8周", "impact": "外资增配A股港股"},
-        "smart_money": {"name": "聪明钱动向", "value": "增配科技+医疗", "trend": "防御+成长", "impact": "机构偏好确定性增长"},
-        "dark_pool": {"name": "暗池交易", "value": "占比上升", "trend": "机构调仓", "impact": "大资金在悄悄布局低估值板块"},
+        "美聯儲資產負債表": {"value": "7.3萬億美元", "trend": "持續縮表", "impact": "流動性收緊，但速度放緩"},
+        "央行公開市場操作": {"value": "淨投放", "trend": "寬鬆", "impact": "國內流動性充裕"},
+        "全球ETF資金流向": {"value": "新興市場淨流入", "trend": "連續8周", "impact": "外資增配A股港股"},
+        "聰明錢動向": {"value": "增配科技+醫療", "trend": "防禦+成長", "impact": "機構偏好確定性增長"},
+        "暗池交易": {"value": "佔比上升", "trend": "機構調倉", "impact": "大資金在悄悄布局低估值板塊"},
     }
 
 # ============================================================
-# HTML报告生成 (麦肯锡风格 - 完整版)
+# HTML報告生成 (麥肯錫風格 - 完整版)
 # ============================================================
 def generate_html(hexagram, wuxing, a_idx, h_idx, weekly_hx,
                   yt_views, prof_analysis, moomoo, gordon, reddit,
                   market_factors, global_cf):
-    
+
     up = BAGUA.get(hexagram.get("upper_trigram",""), {})
     lo = BAGUA.get(hexagram.get("lower_trigram",""), {})
     us = f"{up.get('symbol','')} {up.get('nature','')}"
@@ -292,225 +280,244 @@ def generate_html(hexagram, wuxing, a_idx, h_idx, weekly_hx,
     he_ = sum(1 for i in h_idx if i.get("change_pct",0) < 0)
 
     rt = ["neutral"]
-    if "大吉" in sig or "强看涨" in sig or "大升" in sig or "看涨" in sig: rt.append("bullish")
+    if "大吉" in sig or "強看漲" in sig or "大升" in sig or "看漲" in sig: rt.append("bullish")
     elif "大凶" in sig: rt.append("bearish")
     if ab > ae: rt.append("bullish")
     elif ae > ab: rt.append("bearish")
     bc = rt.count("bullish"); ec = rt.count("bearish")
-    ov = "偏多" if bc >= 2 else ("偏空" if ec >= 2 else "震荡")
+    ov = "偏多" if bc >= 2 else ("偏空" if ec >= 2 else "震盪")
+
+    # 色值定義 (深灰體系)
+    C = {
+        "bg": "#e2e4e8",          # 頁面背景
+        "card": "#f8f9fa",        # 卡片背景
+        "card_b": "#e5e7eb",      # 卡片邊框
+        "text": "#1a1a1a",        # 主文字
+        "label": "#374151",       # 標籤文字（深灰）
+        "sub": "#4b5563",         # 次要文字（中深灰）
+        "border": "#6b7280",      # 邊框
+        "divider": "#9ca3af",     # 分割線（淺灰）
+        "green": "#1a7f37",
+        "red": "#cf222e",
+        "header_bg": "#1a237e",
+        "yellow_bg": "#fff8e1",
+        "blue_bg": "#e3f2fd",
+        "footer_bg": "#f0f2f5",
+    }
 
     def row(idx):
         p = idx.get("change_pct",0)
-        c = "#1a7f37" if p > 0 else ("#cf222e" if p < 0 else "#656d76")
-        return f'<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:10px 4px;font-size:13px;">{idx.get("name","")}</td><td style="text-align:right;padding:10px 4px;font-size:13px;font-variant-numeric:tabular-nums;">{idx.get("price",0)}</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-weight:600;font-variant-numeric:tabular-nums;">{p:+.2f}%</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-variant-numeric:tabular-nums;">{idx.get("change_amt",0):+.2f}</td></tr>'
+        c = C["green"] if p > 0 else (C["red"] if p < 0 else C["sub"])
+        return f'<tr style="border-bottom:1px solid {C["divider"]};"><td style="padding:10px 4px;font-size:13px;">{idx.get("name","")}</td><td style="text-align:right;padding:10px 4px;font-size:13px;font-variant-numeric:tabular-nums;">{idx.get("price",0)}</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-weight:600;font-variant-numeric:tabular-nums;">{p:+.2f}%</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-variant-numeric:tabular-nums;">{idx.get("change_amt",0):+.2f}</td></tr>'
 
-    def section_title(title, num):
-        return f'<div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:#656d76;margin-bottom:16px;border-bottom:1px solid #e5e7eb;padding-bottom:8px;">{num}. {title}</div>'
+    def sec(title, num):
+        return f'<div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:{C["label"]};margin-bottom:16px;border-bottom:1px solid {C["divider"]};padding-bottom:8px;">{" ".join(list("IVX"))[num-1:num] if num else ""}{". " if num else ""}{title}</div>'
 
     def card(label, value, sub=""):
-        return f'<div style="background:#f6f8fa;border:1px solid #e5e7eb;padding:14px 16px;margin-bottom:8px;"><div style="font-size:10px;letter-spacing:1px;color:#656d76;margin-bottom:4px;">{label}</div><div style="font-size:13px;color:#1a1a1a;font-weight:600;">{value}</div>{f"<div style=\"font-size:12px;color:#656d76;margin-top:2px;\">{sub}</div>" if sub else ""}</div>'
+        return f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:14px 16px;margin-bottom:8px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">{label}</div><div style="font-size:13px;color:{C["text"]};font-weight:600;">{value}</div>{f"<div style=\"font-size:12px;color:{C["sub"]};margin-top:2px;\">{sub}</div>" if sub else ""}</div>'
 
-    # Part I: 大V观点
+    # Part I: 大V觀點
     yt_html = ""
     for v in yt_views:
-        sig_color = "#1a7f37" if v["signal"] in ["看涨","低吸"] else ("#cf222e" if v["signal"] in ["谨慎","看跌"] else "#656d76")
-        yt_html += f'''<div style="background:#f6f8fa;border:1px solid #e5e7eb;padding:14px 16px;margin-bottom:8px;">
+        sc = C["green"] if v["signal"] in ["看漲","低吸"] else (C["red"] if v["signal"] in ["謹慎","看跌"] else C["sub"])
+        yt_html += f'''<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:14px 16px;margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <span style="font-size:13px;font-weight:600;color:#1a1a1a;">{v["name"]}</span>
-                <span style="font-size:11px;color:{sig_color};font-weight:600;border:1px solid {sig_color};padding:2px 8px;border-radius:10px;">{v["signal"]}</span>
+                <span style="font-size:13px;font-weight:600;color:{C["text"]};">{v["name"]}</span>
+                <span style="font-size:11px;color:{sc};font-weight:600;border:1px solid {sc};padding:2px 8px;border-radius:10px;">{v["signal"]}</span>
             </div>
-            <div style="font-size:13px;color:#1a1a1a;line-height:1.6;">{v["view"]}</div>
+            <div style="font-size:13px;color:{C["text"]};line-height:1.6;">{v["view"]}</div>
         </div>'''
 
     prof_html = ""
     for p in prof_analysis:
-        prof_html += f'''<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f0f0f0;">
-            <span style="font-size:11px;color:#656d76;min-width:50px;font-weight:600;">{p["source"]}</span>
-            <span style="font-size:13px;color:#1a1a1a;line-height:1.5;">{p["summary"]}</span>
+        prof_html += f'''<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid {C["card_b"]};">
+            <span style="font-size:11px;color:{C["label"]};min-width:60px;font-weight:600;">{p["source"]}</span>
+            <span style="font-size:13px;color:{C["text"]};line-height:1.5;">{p["summary"]}</span>
         </div>'''
 
-    # Part II: 市场扫描
+    # Part II: 市場掃描
     moomoo_html = ""
     for k, v in moomoo.items():
-        label = {"market_breadth":"市场广度","sector_rotation":"板块轮动","capital_flow":"资金流向","key_level":"关键位"}[k]
-        moomoo_html += f'<div style="padding:6px 0;border-bottom:1px solid #f0f0f0;"><span style="font-size:11px;color:#656d76;">{label}:</span> <span style="font-size:13px;color:#1a1a1a;">{v}</span></div>'
+        moomoo_html += f'<div style="padding:6px 0;border-bottom:1px solid {C["card_b"]};"><span style="font-size:11px;color:{C["label"]};">{k}:</span> <span style="font-size:13px;color:{C["text"]};">{v}</span></div>'
 
     gordon_html = ""
     for g in gordon:
-        sent_color = "#cf222e" if g["sentiment"] == "悲观" else ("#1a7f37" if g["sentiment"] == "乐观" else "#656d76")
-        gordon_html += f'<div style="padding:6px 0;border-bottom:1px solid #f0f0f0;"><span style="font-size:11px;color:#656d76;">{g["topic"]}</span> <span style="font-size:11px;color:{sent_color};">({g["sentiment"]})</span><br><span style="font-size:13px;color:#1a1a1a;">{g["summary"]}</span></div>'
+        sc = C["red"] if g["sentiment"] == "悲觀" else (C["green"] if g["sentiment"] == "樂觀" else C["sub"])
+        gordon_html += f'<div style="padding:6px 0;border-bottom:1px solid {C["card_b"]};"><span style="font-size:11px;color:{C["label"]};">{g["topic"]}</span> <span style="font-size:11px;color:{sc};">({g["sentiment"]})</span><br><span style="font-size:13px;color:{C["text"]};">{g["summary"]}</span></div>'
 
     reddit_html = ""
     for r in reddit:
-        reddit_html += f'<div style="padding:8px 0;border-bottom:1px solid #f0f0f0;"><div style="font-size:13px;color:#1a1a1a;font-weight:500;">{r["title"]}</div><div style="font-size:11px;color:#656d76;margin-top:4px;">👍 {r["score"]} | 💬 {r["comments"]}</div></div>'
+        reddit_html += f'<div style="padding:8px 0;border-bottom:1px solid {C["card_b"]};"><div style="font-size:13px;color:{C["text"]};font-weight:500;">{r["title"]}</div><div style="font-size:11px;color:{C["sub"]};margin-top:4px;">👍 {r["score"]} | 💬 {r["comments"]}</div></div>'
 
-    # Part III: 市场因子
+    # Part III: 市場因子
     factor_html = ""
     for k, v in market_factors.items():
-        factor_html += f'<div style="background:#f6f8fa;border:1px solid #e5e7eb;padding:12px 16px;margin-bottom:6px;"><div style="font-size:10px;letter-spacing:1px;color:#656d76;margin-bottom:2px;">{v["name"]}: <span style="font-weight:600;color:#1a1a1a;">{v["value"]}</span></div><div style="font-size:12px;color:#1a1a1a;line-height:1.5;">{v["impact"]}</div></div>'
+        factor_html += f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:2px;">{k}: <span style="font-weight:600;color:{C["text"]};">{v["value"]}</span></div><div style="font-size:12px;color:{C["text"]};line-height:1.5;">{v["impact"]}</div></div>'
 
-    # Part IV: 每日运势
+    # Part IV: 每日運勢
     fortune_html = ""
-    weekday_names = ["周一","周二","周三","周四","周五","周六","周日"]
+    wdn = ["週一","週二","週三","週四","週五","週六","週日"]
     for i, day in enumerate(weekly_hx):
-        hx = day["hexagram"]
-        wx = day["wuxing"]
-        dt = day["date"]
-        wname = weekday_names[dt.weekday()]
-        f_color = "#1a7f37" if "看涨" in hx.get("signal","") or "大吉" in hx.get("signal","") else ("#cf222e" if "看跌" in hx.get("signal","") or "大凶" in hx.get("signal","") else "#656d76")
-        fortune_html += f'''<div style="background:#f6f8fa;border:1px solid #e5e7eb;padding:12px 16px;margin-bottom:6px;">
+        hx = day["hexagram"]; wx = day["wuxing"]; dt = day["date"]
+        wn = wdn[dt.weekday()]
+        fc = C["green"] if "看漲" in hx.get("signal","") or "大吉" in hx.get("signal","") else (C["red"] if "看跌" in hx.get("signal","") or "大凶" in hx.get("signal","") else C["sub"])
+        fortune_html += f'''<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <span style="font-size:13px;font-weight:600;color:#1a1a1a;">{wname} ({dt.strftime("%m/%d")})</span>
-                <span style="font-size:12px;color:{f_color};font-weight:600;">{hx.get("signal","")}</span>
+                <span style="font-size:13px;font-weight:600;color:{C["text"]};">{wn} ({dt.strftime("%m/%d")})</span>
+                <span style="font-size:12px;color:{fc};font-weight:600;">{hx.get("signal","")}</span>
             </div>
-            <div style="font-size:12px;color:#656d76;">{hx.get("hexagram_name","")} | 五行{wx.get("day_element","")} | {hx.get("trend","")}</div>
-            <div style="font-size:12px;color:#1a1a1a;margin-top:4px;line-height:1.5;">{hx.get("stock_meaning","")}</div>
+            <div style="font-size:12px;color:{C["sub"]};">{hx.get("hexagram_name","")} | 五行{wx.get("day_element","")} | {hx.get("trend","")}</div>
+            <div style="font-size:12px;color:{C["text"]};margin-top:4px;line-height:1.5;">{hx.get("stock_meaning","")}</div>
         </div>'''
 
-    # Part V: 全球现金流
+    # Part V: 全球現金流
     cf_html = ""
     for k, v in global_cf.items():
-        trend_color = "#1a7f37" if "净流入" in v.get("trend","") or "宽松" in v.get("trend","") or "增配" in v.get("trend","") else ("#cf222e" if "收紧" in v.get("trend","") or "净流出" in v.get("trend","") else "#656d76")
-        cf_html += f'''<div style="background:#f6f8fa;border:1px solid #e5e7eb;padding:12px 16px;margin-bottom:6px;">
+        tc = C["green"] if "淨流入" in v.get("trend","") or "寬鬆" in v.get("trend","") or "增配" in v.get("trend","") else (C["red"] if "收緊" in v.get("trend","") or "淨流出" in v.get("trend","") else C["sub"])
+        cf_html += f'''<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:12px 16px;margin-bottom:6px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <span style="font-size:13px;font-weight:600;color:#1a1a1a;">{v["name"]}</span>
-                <span style="font-size:11px;color:{trend_color};font-weight:600;">{v["trend"]}</span>
+                <span style="font-size:13px;font-weight:600;color:{C["text"]};">{k}</span>
+                <span style="font-size:11px;color:{tc};font-weight:600;">{v["trend"]}</span>
             </div>
-            <div style="font-size:12px;color:#656d76;margin-bottom:2px;">当前值: {v["value"]}</div>
-            <div style="font-size:12px;color:#1a1a1a;line-height:1.5;">{v["impact"]}</div>
+            <div style="font-size:12px;color:{C["sub"]};margin-bottom:2px;">當前值: {v["value"]}</div>
+            <div style="font-size:12px;color:{C["text"]};line-height:1.5;">{v["impact"]}</div>
         </div>'''
 
-    # 五行板块
+    # 五行板塊
     bs = wuxing.get("sectors",{}).get("bullish",[])
     es = wuxing.get("sectors",{}).get("bearish",[])
     st = ""
     if bs:
-        st += '<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:1px;color:#656d76;margin-bottom:6px;">利好板块</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'
-        for s in bs: st += f'<span style="display:inline-block;padding:4px 12px;border:1px solid #1a1a1a;font-size:12px;">{s}</span>'
+        st += f'<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:6px;">利好板塊</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'
+        for s in bs: st += f'<span style="display:inline-block;padding:4px 12px;border:1px solid {C["text"]};font-size:12px;">{s}</span>'
         st += '</div></div>'
     if es:
-        st += '<div style="margin-top:12px;"><div style="font-size:10px;letter-spacing:1px;color:#656d76;margin-bottom:6px;">注意板块</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'
-        for s in es: st += f'<span style="display:inline-block;padding:4px 12px;border:1px solid #656d76;font-size:12px;color:#656d76;">{s}</span>'
+        st += f'<div style="margin-top:12px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:6px;">注意板塊</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'
+        for s in es: st += f'<span style="display:inline-block;padding:4px 12px;border:1px solid {C["sub"]};font-size:12px;color:{C["sub"]};">{s}</span>'
         st += '</div></div>'
 
-    at = f'{ab}涨{ae}跌' if a_idx else '休市'
-    ad = '偏多' if ab > ae else ('偏空' if ae > ab else '震荡') if a_idx else '休市'
-    ht = f'{hb}涨{he_}跌' if h_idx else '休市'
-    hdd = '偏多' if hb > he_ else ('偏空' if he_ > hb else '震荡') if h_idx else '休市'
+    at = f'{ab}漲{ae}跌' if a_idx else '休市'
+    ad = '偏多' if ab > ae else ('偏空' if ae > ab else '震盪') if a_idx else '休市'
+    ht = f'{hb}漲{he_}跌' if h_idx else '休市'
+    hdd = '偏多' if hb > he_ else ('偏空' if he_ > hb else '震盪') if h_idx else '休市'
     wu_el = wuxing.get("day_element","")
     wu_bi = ELEMENT_MARKET.get(wu_el,{}).get("bullish","")
-
     today_str = hexagram['date']
+    bs_str = ', '.join(bs) if bs else '防禦性板塊'
+    es_str = ', '.join(es) if es else '市場波動'
+
+    # 羅馬數字
+    roman = ["","I","II","III","IV","V","VI"]
 
     return f"""<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Market Report | {today_str}</title></head>
-<body style="margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,'Helvetica Neue','Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;color:#1a1a1a;-webkit-font-smoothing:antialiased;">
-<div style="max-width:720px;margin:32px auto;background:#ffffff;border:1px solid #d1d5db;">
+<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Market Report | {today_str}</title></head>
+<body style="margin:0;padding:0;background:{C["bg"]};font-family:-apple-system,'Helvetica Neue','Segoe UI',Roboto,'PingFang TC','Microsoft JhengHei',sans-serif;color:{C["text"]};-webkit-font-smoothing:antialiased;">
+<div style="max-width:720px;margin:32px auto;background:{C["card"]};border:1px solid {C["card_b"]};">
 
 <!-- HEADER -->
-<div style="padding:32px 36px 24px;border-bottom:3px solid #1a1a1a;">
+<div style="padding:32px 36px 24px;border-bottom:3px solid {C["text"]};">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
-<div><div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#656d76;margin-bottom:8px;">ICHING STOCK ANALYSIS</div>
-<h1 style="margin:0;font-size:22px;font-weight:600;color:#1a1a1a;letter-spacing:0.5px;">每日A股港股全景分析</h1>
-<div style="font-size:13px;color:#656d76;margin-top:6px;">{today_str}</div></div>
-<div><div style="display:inline-block;padding:6px 20px;border:2px solid #1a1a1a;font-size:15px;font-weight:700;letter-spacing:2px;">{ov}</div></div>
+<div><div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:{C["label"]};margin-bottom:8px;">ICHING STOCK ANALYSIS</div>
+<h1 style="margin:0;font-size:22px;font-weight:600;color:{C["text"]};letter-spacing:0.5px;">每日A股港股全景分析</h1>
+<div style="font-size:13px;color:{C["sub"]};margin-top:6px;">{today_str}</div></div>
+<div><div style="display:inline-block;padding:6px 20px;border:2px solid {C["text"]};font-size:15px;font-weight:700;letter-spacing:2px;">{ov}</div></div>
 </div></div>
 
 <!-- 卦象 + 行情 -->
-<div style="padding:28px 36px;border-bottom:1px solid #e5e7eb;">
-{section_title("卦象与市场","I")}
+<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
+{sec("卦象與市場",1)}
 <div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap;">
-<div style="flex:1;"><div style="font-size:28px;font-weight:700;color:#1a1a1a;margin-bottom:4px;letter-spacing:2px;">{hexagram.get('hexagram_name','')}</div>
-<div style="font-size:13px;color:#656d76;">上{us} ｜ 下{ls}</div></div>
-<div style="text-align:right;"><div style="font-size:13px;color:#1a1a1a;font-weight:600;">{sig}</div>
-<div style="font-size:12px;color:#656d76;margin-top:2px;">趋势: {trd}</div></div></div>
+<div style="flex:1;"><div style="font-size:28px;font-weight:700;color:{C["text"]};margin-bottom:4px;letter-spacing:2px;">{hexagram.get('hexagram_name','')}</div>
+<div style="font-size:13px;color:{C["sub"]};">上{us} ｜ 下{ls}</div></div>
+<div style="text-align:right;"><div style="font-size:13px;color:{C["text"]};font-weight:600;">{sig}</div>
+<div style="font-size:12px;color:{C["sub"]};margin-top:2px;">趨勢: {trd}</div></div></div>
 
-<div style="background:#f6f8fa;border-left:3px solid #1a1a1a;padding:14px 18px;margin:16px 0;">
-<div style="font-size:10px;color:#656d76;margin-bottom:4px;letter-spacing:1px;">卦辞</div>
-<div style="font-size:13px;color:#1a1a1a;line-height:1.8;font-style:italic;">{hexagram.get('judgment','')}</div></div>
+<div style="background:{C["yellow_bg"]};border-left:3px solid {C["text"]};padding:14px 18px;margin:16px 0;">
+<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">卦辭</div>
+<div style="font-size:13px;color:{C["text"]};line-height:1.8;font-style:italic;">{hexagram.get('judgment','')}</div></div>
 
-<div style="background:#f6f8fa;border-left:3px solid #656d76;padding:14px 18px;margin:16px 0;">
-<div style="font-size:10px;color:#656d76;margin-bottom:4px;letter-spacing:1px;">市场解读</div>
-<div style="font-size:13px;color:#1a1a1a;line-height:1.8;">{hexagram.get('stock_meaning','')}</div></div>
+<div style="background:{C["blue_bg"]};border-left:3px solid {C["sub"]};padding:14px 18px;margin:16px 0;">
+<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">市場解讀</div>
+<div style="font-size:13px;color:{C["text"]};line-height:1.8;">{hexagram.get('stock_meaning','')}</div></div>
 
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#d1d5db;border:1px solid #d1d5db;margin-top:20px;">
-<div style="background:#fff;padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:#656d76;margin-bottom:4px;">日干</div><div style="font-size:16px;font-weight:600;color:#1a1a1a;">{wuxing.get('day_stem','-')}</div></div>
-<div style="background:#fff;padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:#656d76;margin-bottom:4px;">日支</div><div style="font-size:16px;font-weight:600;color:#1a1a1a;">{wuxing.get('day_branch','-')}</div></div>
-<div style="background:#fff;padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:#656d76;margin-bottom:4px;">五行</div><div style="font-size:16px;font-weight:600;color:#1a1a1a;">{wuxing.get('day_element','-')}</div></div>
-<div style="background:#fff;padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:#656d76;margin-bottom:4px;">卦五行</div><div style="font-size:16px;font-weight:600;color:#1a1a1a;">{hexagram.get('element','-')}</div></div></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:{C["divider"]};border:1px solid {C["divider"]};margin-top:20px;">
+<div style="background:{C["card"]};padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">日干</div><div style="font-size:16px;font-weight:600;color:{C["text"]};">{wuxing.get('day_stem','-')}</div></div>
+<div style="background:{C["card"]};padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">日支</div><div style="font-size:16px;font-weight:600;color:{C["text"]};">{wuxing.get('day_branch','-')}</div></div>
+<div style="background:{C["card"]};padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">五行</div><div style="font-size:16px;font-weight:600;color:{C["text"]};">{wuxing.get('day_element','-')}</div></div>
+<div style="background:{C["card"]};padding:14px;text-align:center;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">卦五行</div><div style="font-size:16px;font-weight:600;color:{C["text"]};">{hexagram.get('element','-')}</div></div></div>
 {st}</div>
 
-<div style="padding:28px 36px;border-bottom:1px solid #e5e7eb;">
-{section_title("A股市场","")}
+<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
+{sec("A股市場","")}
 <table style="width:100%;border-collapse:collapse;">
-<thead><tr style="border-bottom:2px solid #1a1a1a;">
-<th style="text-align:left;padding:8px 4px;font-weight:600;color:#656d76;font-size:10px;letter-spacing:1px;">指数</th>
-<th style="text-align:right;padding:8px 4px;font-weight:600;color:#656d76;font-size:10px;letter-spacing:1px;">收盘价</th>
-<th style="text-align:right;padding:8px 4px;font-weight:600;color:#656d76;font-size:10px;letter-spacing:1px;">涨跌幅</th>
-<th style="text-align:right;padding:8px 4px;font-weight:600;color:#656d76;font-size:10px;letter-spacing:1px;">涨跌额</th>
+<thead><tr style="border-bottom:2px solid {C["text"]};">
+<th style="text-align:left;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">指數</th>
+<th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">收盤價</th>
+<th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">漲跌幅</th>
+<th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">漲跌額</th>
 </tr></thead><tbody>
-{"".join(row(i) for i in a_idx) if a_idx else '<tr><td colspan="4" style="text-align:center;color:#656d76;padding:24px 0;">休市中</td></tr>'}
+{"".join(row(i) for i in a_idx) if a_idx else '<tr><td colspan="4" style="text-align:center;color:{C["sub"]};padding:24px 0;">休市中</td></tr>'}
 </tbody></table>
-{f'<div style="margin-top:12px;font-size:12px;color:#656d76;">涨跌比: {at}</div>' if a_idx else ''}</div>
+{f'<div style="margin-top:12px;font-size:12px;color:{C["sub"]};">漲跌比: {at}</div>' if a_idx else ''}</div>
 
-<div style="padding:28px 36px;border-bottom:1px solid #e5e7eb;">
-{section_title("港股市场","")}
+<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
+{sec("港股市場","")}
 <table style="width:100%;border-collapse:collapse;">
-<thead><tr style="border-bottom:2px solid #1a1a1a;">
-<th style="text-align:left;padding:8px 4px;font-weight:600;color:#656d76;font-size:10px;letter-spacing:1px;">指数</th>
-<th style="text-align:right;padding:8px 4px;font-weight:600;color:#656d76;font-size:10px;letter-spacing:1px;">收盘价</th>
-<th style="text-align:right;padding:8px 4px;font-weight:600;color:#656d76;font-size:10px;letter-spacing:1px;">涨跌幅</th>
-<th style="text-align:right;padding:8px 4px;font-weight:600;color:#656d76;font-size:10px;letter-spacing:1px;">涨跌额</th>
+<thead><tr style="border-bottom:2px solid {C["text"]};">
+<th style="text-align:left;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">指數</th>
+<th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">收盤價</th>
+<th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">漲跌幅</th>
+<th style="text-align:right;padding:8px 4px;font-weight:600;color:{C["label"]};font-size:10px;letter-spacing:1px;">漲跌額</th>
 </tr></thead><tbody>
-{"".join(row(i) for i in h_idx) if h_idx else '<tr><td colspan="4" style="text-align:center;color:#656d76;padding:24px 0;">休市中</td></tr>'}
+{"".join(row(i) for i in h_idx) if h_idx else '<tr><td colspan="4" style="text-align:center;color:{C["sub"]};padding:24px 0;">休市中</td></tr>'}
 </tbody></table>
-{f'<div style="margin-top:12px;font-size:12px;color:#656d76;">涨跌比: {ht}</div>' if h_idx else ''}</div>
+{f'<div style="margin-top:12px;font-size:12px;color:{C["sub"]};">漲跌比: {ht}</div>' if h_idx else ''}</div>
 
-<!-- PART 1: 大V观点 -->
-<div style="padding:28px 36px;border-bottom:1px solid #e5e7eb;">
-{section_title("大V观点与专业分析","II")}
-<div style="font-size:11px;color:#656d76;margin-bottom:12px;font-weight:600;">YouTuber / 财经大V</div>
+<!-- PART 1: 大V觀點 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
+{sec("大V觀點與專業分析",2)}
+<div style="font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">YouTuber / 財經大V</div>
 {yt_html}
-<div style="margin-top:20px;font-size:11px;color:#656d76;margin-bottom:12px;font-weight:600;">财经专业频道</div>
+<div style="margin-top:20px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">財經專業頻道</div>
 {prof_html}</div>
 
-<!-- PART 2: 市场扫描 -->
-<div style="padding:28px 36px;border-bottom:1px solid #e5e7eb;">
-{section_title("市场舆情扫描","III")}
-<div style="font-size:11px;color:#656d76;margin-bottom:12px;font-weight:600;">moomoo 市场分析</div>
+<!-- PART 2: 市場掃描 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
+{sec("市場輿情掃描",3)}
+<div style="font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">moomoo 市場分析</div>
 {moomoo_html}
-<div style="margin-top:16px;font-size:11px;color:#656d76;margin-bottom:12px;font-weight:600;">高登网 主要评论</div>
+<div style="margin-top:16px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">高登網 主要評論</div>
 {gordon_html}
-<div style="margin-top:16px;font-size:11px;color:#656d76;margin-bottom:12px;font-weight:600;">Reddit 热门讨论</div>
+<div style="margin-top:16px;font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">Reddit 熱門討論</div>
 {reddit_html}</div>
 
-<!-- PART 3: 本周走势 -->
-<div style="padding:28px 36px;border-bottom:1px solid #e5e7eb;">
-{section_title("本周走势研判","IV")}
-<div style="font-size:11px;color:#656d76;margin-bottom:12px;font-weight:600;">核心市场因子</div>
+<!-- PART 3: 本週走勢 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
+{sec("本週走勢研判",4)}
+<div style="font-size:11px;color:{C["label"]};margin-bottom:12px;font-weight:600;">核心市場因子</div>
 {factor_html}
-<div style="margin-top:16px;padding:14px 18px;background:#f6f8fa;border:1px solid #d1d5db;">
-<div style="font-size:10px;color:#656d76;margin-bottom:4px;letter-spacing:1px;">本周综合判断</div>
-<div style="font-size:13px;color:#1a1a1a;font-weight:600;line-height:1.7;">综合卦象「{hexagram.get('hexagram_name','')}」（{sig}）及市场因子，本周整体基调为「{ov}」。「{wu_el}」日五行主导，{wu_bi}。建议关注{', '.join(bs) if bs else '防御性板块'}方向，注意{', '.join(es) if es else '市场波动'}风险。</div></div></div>
+<div style="margin-top:16px;padding:14px 18px;background:{C["card"]};border:1px solid {C["card_b"]};">
+<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">本週綜合判斷</div>
+<div style="font-size:13px;color:{C["text"]};font-weight:600;line-height:1.7;">綜合卦象「{hexagram.get('hexagram_name','')}」（{sig}）及市場因子，本週整體基調為「{ov}」。「{wu_el}」日五行主導，{wu_bi}。建議關注{bs_str}方向，注意{es_str}風險。</div></div></div>
 
-<!-- PART 4: 每日运势 -->
-<div style="padding:28px 36px;border-bottom:1px solid #e5e7eb;">
-{section_title("七日运势","V")}
+<!-- PART 4: 每日運勢 -->
+<div style="padding:28px 36px;border-bottom:1px solid {C["divider"]};">
+{sec("七日運勢",5)}
 {fortune_html}</div>
 
-<!-- PART 5: 全球现金流 -->
+<!-- PART 5: 全球現金流 -->
 <div style="padding:28px 36px;">
-{section_title("全球现金流与大资本动向","VI")}
+{sec("全球現金流與大資本動向",6)}
 {cf_html}
-<div style="margin-top:16px;padding:14px 18px;background:#f6f8fa;border:1px solid #d1d5db;">
-<div style="font-size:10px;color:#656d76;margin-bottom:4px;letter-spacing:1px;">大资本意图推演</div>
-<div style="font-size:13px;color:#1a1a1a;font-weight:600;line-height:1.7;">当前全球流动性呈现"外紧内松"格局。美联储缩表放缓但利率仍高，央行持续宽松注入流动性。大资金正在从高位科技股向低估值防御板块转移，同时逢低布局A股港股核心资产。暗池交易活跃度上升暗示机构在悄悄建仓。短期市场可能继续震荡洗盘，但中长期配置窗口正在打开。</div></div></div>
+<div style="margin-top:16px;padding:14px 18px;background:{C["card"]};border:1px solid {C["card_b"]};">
+<div style="font-size:10px;color:{C["label"]};margin-bottom:4px;letter-spacing:1px;">大資本意圖推演</div>
+<div style="font-size:13px;color:{C["text"]};font-weight:600;line-height:1.7;">當前全球流動性呈現「外緊內鬆」格局。美聯儲縮表放緩但利率仍高，央行持續寬鬆注入流動性。大資金正在從高位科技股向低估值防禦板塊轉移，同時逢低布局A股港股核心資產。暗池交易活躍度上升暗示機構在悄悄建倉。短期市場可能繼續震盪洗盤，但中長期配置窗口正在打開。</div></div></div>
 
 <!-- FOOTER -->
-<div style="padding:20px 36px;border-top:1px solid #e5e7eb;background:#fafbfc;">
-<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#656d76;">
+<div style="padding:20px 36px;border-top:1px solid {C["divider"]};background:{C["footer_bg"]};">
+<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:{C["sub"]};">
 <span>Iching Stock Analysis Report</span><span>{today_str}</span></div>
-<div style="font-size:10px;color:#9ca3af;margin-top:8px;text-align:center;">本报告由AI自动生成，仅供参考，不构成投资建议。市场有风险，投资需谨慎。</div></div>
+<div style="font-size:10px;color:{C["label"]};margin-top:8px;text-align:center;">本報告由AI自動生成，僅供參考，不構成投資建議。市場有風險，投資需謹慎。</div></div>
 
 </div></body></html>"""
 
@@ -528,10 +535,10 @@ def push(title, content):
         if j.get("code") == 200:
             logger.info("✅ PushPlus 推送成功")
             return True
-        logger.error(f"❌ PushPlus 失败: {j}")
+        logger.error(f"❌ PushPlus 失敗: {j}")
         return False
     except Exception as e:
-        logger.error(f"❌ PushPlus 异常: {e}")
+        logger.error(f"❌ PushPlus 異常: {e}")
         return False
 
 
@@ -544,29 +551,25 @@ async def run():
     logger.info("=" * 50)
     t0 = datetime.now()
 
-    # 基础数据
-    logger.info("☯️ 计算卦象 & 获取行情...")
+    logger.info("☯️ 計算卦象 & 獲取行情...")
     hx = get_daily_hexagram(t0)
     wx = get_wuxing_info(t0)
     weekly_hx = get_weekly_hexagrams(t0)
     ai = fetch_a_share()
     hi = fetch_hk()
 
-    # Part 1 & 2: 观点 & 扫描
-    logger.info("📡 获取观点 & 扫描市场...")
+    logger.info("📡 獲取觀點 & 掃描市場...")
     yt_views = get_youtuber_views()
     prof = get_professional_analysis()
     moomoo = get_moomoo_analysis()
     gordon = get_gordon_comments()
     reddit = fetch_reddit_hot()
 
-    # Part 3 & 5: 因子 & 现金流
-    logger.info("📊 分析因子 & 现金流...")
+    logger.info("📊 分析因子 & 現金流...")
     mf = get_market_factors()
     gcf = get_global_cashflow()
 
-    # 生成报告
-    logger.info("📝 生成报告...")
+    logger.info("📝 生成報告...")
     html = generate_html(hx, wx, ai, hi, weekly_hx, yt_views, prof, moomoo, gordon, reddit, mf, gcf)
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -575,12 +578,11 @@ async def run():
         f.write(html)
     logger.info(f"  已保存: {path}")
 
-    # 推送
     logger.info("📤 推送微信...")
     ok = push(f"📈 每日A股港股全景分析 | {t0.strftime('%Y-%m-%d')}", html)
 
     dur = (datetime.now() - t0).total_seconds()
-    logger.info(f"✅ 完成! 耗时: {dur:.1f}s | 推送: {'✅' if ok else '❌'}")
+    logger.info(f"✅ 完成! 耗時: {dur:.1f}s | 推送: {'✅' if ok else '❌'}")
     return ok
 
 
