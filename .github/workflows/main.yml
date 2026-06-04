@@ -5,7 +5,7 @@ on:
     # UTC 07:30 = 北京时间 15:30 (周一至周五)
     - cron: '30 7 * * 1-5'
   workflow_dispatch:
-  push:   # 临时加这一行，用来“第一次跑通注册”
+  push:
 
 permissions:
   contents: read
@@ -22,28 +22,37 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-        
 
       - name: Set timezone to Asia/Shanghai
         run: |
           sudo ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
           echo "Asia/Shanghai" | sudo tee /etc/timezone
 
-      - name: Install dependencies
+      - name: 【准备】安装依赖
         run: |
+          echo -e "\033[1;30m────────────────────────────────────────\033[0m"
+          echo -e "\033[1;34m【准备阶段】安装基础依赖包\033[0m"
+          echo -e "\033[1;30m────────────────────────────────────────\033[0m"
           pip install requests
+          echo -e "\033[0;32m✓ 依赖安装完成\033[0m"
 
-      - name: Run Iching Stock Analysis
+      - name: 【核心】易经股票分析执行
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: |
-          echo "🔮 Starting Iching Stock Analysis..."
-          echo "⏰ Time: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')"
+          echo -e "\n\033[1;34m════════════════════════════════════════\033[0m"
+          echo -e "\033[1;30m麦肯锡咨询 · 每日易经股票分析报告\033[0m"
+          echo -e "\033[1;34m════════════════════════════════════════\033[0m"
+          echo -e "\033[0;37m执行时间：$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')\033[0m"
+          echo -e "\033[1;30m────────────────────────────────────────\033[0m"
+          
           python quick_start.py
-          echo ""
-          echo "✅ Analysis completed!"
+          
+          echo -e "\033[1;30m────────────────────────────────────────\033[0m"
+          echo -e "\033[1;32m● 分析完成｜报告已生成｜决策参考就绪\033[0m"
+          echo -e "\033[1;34m════════════════════════════════════════\033[0m\n"
 
-      - name: Upload Report Artifact
+      - name: 【归档】报告文件上传
         if: always()
         uses: actions/upload-artifact@v4
         with:
