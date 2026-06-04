@@ -5,7 +5,7 @@ on:
     # UTC 07:30 = 北京时间 15:30 (周一至周五)
     - cron: '30 7 * * 1-5'
   workflow_dispatch:
-  push:
+  push:   # 临时加这一行，用来“第一次跑通注册”
 
 permissions:
   contents: read
