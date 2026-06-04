@@ -1,5 +1,14 @@
-gh auth login
-# 查看所有workflow
-gh workflow list
-# 直接运行，--ref填分支名
-gh workflow run iching-daily.yml --ref main
+name: Daily Iching Stock Analysis
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "first run to register workflow"
