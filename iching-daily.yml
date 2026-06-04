@@ -4,7 +4,7 @@ on:
   schedule:
     # UTC 07:30 = 北京时间 15:30 (周一至周五)
     - cron: '30 7 * * 1-5'
-  workflow_dispatch:  # 允许手动触发测试
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,7 +13,6 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
