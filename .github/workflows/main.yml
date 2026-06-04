@@ -2,8 +2,8 @@ name: Daily Iching Stock Analysis
 
 on:
   schedule:
-    # UTC 07:30 = 北京时间 15:30 (周一至周五)
-    - cron: '30 7 * * 1-5'
+    # UTC 03:30 = 北京时间 15:30 (周一至周五)
+    - cron: '30 3 * * 1-5'
   workflow_dispatch:
   push:
 
@@ -16,10 +16,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5 # v4→v5 支援Node24
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6 # v5→v6 支援Node24
         with:
           python-version: '3.11'
 
@@ -54,7 +54,7 @@ jobs:
 
       - name: 【归档】报告文件上传
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5 #v4→v5 支援Node24
         with:
           name: daily-report-${{ github.run_number }}
           path: output/
