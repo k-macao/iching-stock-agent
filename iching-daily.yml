@@ -1,0 +1,52 @@
+name: Daily Iching Stock Analysis
+
+on:
+  schedule:
+    # UTC 07:30 = 北京时间 15:30 (周一至周五)
+    - cron: '30 7 * * 1-5'
+  workflow_dispatch:  # 允许手动触发测试
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Set timezone to Asia/Shanghai
+        run: |
+          sudo ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+          echo "Asia/Shanghai" | sudo tee /etc/timezone
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Run Iching Stock Analysis
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: |
+          echo "🔮 Starting Iching Stock Analysis..."
+          echo "⏰ Time: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')"
+          python quick_start.py
+          echo ""
+          echo "✅ Analysis completed!"
+
+      - name: Upload Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-report-${{ github.run_number }}
+          path: output/
+          retention-days: 7
