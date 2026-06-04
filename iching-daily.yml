@@ -2,7 +2,7 @@ name: Daily Iching Stock Analysis
 
 on:
   schedule:
-    # UTC 07:30 = 北京时间 15:30 (周一至周五)
+    # UTC 07:30 = 北京时间 15:30 (周一至周五)111
     - cron: '30 7 * * 1-5'
   workflow_dispatch:
 
