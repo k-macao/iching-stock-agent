@@ -6,7 +6,6 @@
 import os, sys, asyncio, logging, requests
 from datetime import datetime, timedelta
 from typing import Dict, List
-from zhconv import convert as zh_tw
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -311,7 +310,9 @@ def generate_html(hexagram, wuxing, a_idx, h_idx, weekly_hx,
         return f'<tr style="border-bottom:1px solid {C["divider"]};"><td style="padding:10px 4px;font-size:13px;">{idx.get("name","")}</td><td style="text-align:right;padding:10px 4px;font-size:13px;font-variant-numeric:tabular-nums;">{idx.get("price",0)}</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-weight:600;font-variant-numeric:tabular-nums;">{p:+.2f}%</td><td style="text-align:right;padding:10px 4px;font-size:13px;color:{c};font-variant-numeric:tabular-nums;">{idx.get("change_amt",0):+.2f}</td></tr>'
 
     def sec(title, num):
-        return f'<div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:{C["label"]};margin-bottom:16px;border-bottom:1px solid {C["divider"]};padding-bottom:8px;">{" ".join(list("IVX"))[num-1:num] if num else ""}{". " if num else ""}{title}</div>'
+        rn = {1:"I", 2:"II", 3:"III", 4:"IV", 5:"V", 6:"VI"}
+        prefix = f"{rn[num]}. " if num in rn else ""
+        return f'<div style="font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:{C["label"]};margin-bottom:16px;border-bottom:1px solid {C["divider"]};padding-bottom:8px;">{prefix}{title}</div>'
 
     def card(label, value, sub=""):
         return f'<div style="background:{C["card"]};border:1px solid {C["card_b"]};padding:14px 16px;margin-bottom:8px;"><div style="font-size:10px;letter-spacing:1px;color:{C["label"]};margin-bottom:4px;">{label}</div><div style="font-size:13px;color:{C["text"]};font-weight:600;">{value}</div>{f"<div style=\"font-size:12px;color:{C["sub"]};margin-top:2px;\">{sub}</div>" if sub else ""}</div>'
