@@ -5,7 +5,7 @@ on:
     # 每天 UTC 時間 4:00 (港澳時間 12:00) 執行
     - cron: '0 4 * * *'
   workflow_dispatch: # 允許在 GitHub 網頁上手動點擊運行
-push:
+
 jobs:
   run-agent:
     runs-on: ubuntu-latest
