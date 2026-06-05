@@ -1,5 +1,0 @@
-gh auth login
-# 查看所有workflow
-gh workflow list
-# 直接运行，--ref填分支名
-gh workflow run iching-daily.yml --ref main
