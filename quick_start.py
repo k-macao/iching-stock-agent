@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI量化策略每日/A股港股分析 - 麥肯錫風格 v2.0
+AI量化策略/A股港股分析 - 麥肯錫風格 v2.0
 結構：每日運勢 / 本週走勢 / 大V觀點 / 市場掃描 / 港股通滬股通 / 全球現金流
 """
 import os, sys, asyncio, logging, requests
