@@ -1,0 +1,31 @@
+name: TradeAgent Daily Push
+
+on:
+  schedule:
+    # 每天 UTC 時間 4:00 (港澳時間 12:00) 執行
+    - cron: '0 4 * * *'
+  workflow_dispatch: # 允許在 GitHub 網頁上手動點擊運行
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 檢出代碼 (Checkout)
+      uses: actions/checkout@v3
+
+    - name: 設置 Python 環境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 安裝依賴 (Install Dependencies)
+      run: |
+        pip install -r requirements.txt
+
+    - name: 執行 AI 分析與推送
+      env:
+        # 將 GitHub Secrets 注入為環境變量，保護你的 Token 不被公開
+        PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+      run: |
+        python trade_agent_daily.py
