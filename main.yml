@@ -1,4 +1,4 @@
-name: TradeAgent Daily Push
+name: TradeAgent AI
 
 on:
   schedule:
